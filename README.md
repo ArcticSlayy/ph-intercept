@@ -115,6 +115,8 @@ The ship targets and destroys blocked entities autonomously. At five on-screen t
 
 Four ships are selectable from the HUD: **Protector** (NSEA Protector, default), **Falcon** (Millennium Falcon), **Swordfish** (Swordfish II), and **Enterprise** (NCC-1701). Switching ships triggers a warp-out/warp-in transition that pushes nearby entities aside.
 
+<img width="374" height="111" alt="image" src="https://github.com/user-attachments/assets/fcd98b95-fa6b-4149-8247-f2f7ece9f156" />
+
 ---
 
 ## The HUD
@@ -128,6 +130,8 @@ A strip across the bottom, divided into four panels:
 **GRAVITY:** gravity list size. The arrow triggers a list update and confirms when done.
 
 **SHIPS:** active ship name. Click to open the ship selector.
+
+<img width="1712" height="103" alt="image" src="https://github.com/user-attachments/assets/0a577b39-6722-4e4d-9f5e-e44488284042" />
 
 ---
 
