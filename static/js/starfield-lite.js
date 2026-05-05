@@ -1,4 +1,4 @@
-// ── ph-intercept starfield — fixed view, no pan/zoom/tooltips ────────
+// ── ph-intercept starfield - fixed view, no pan/zoom/tooltips ────────
 // BG_MODE is injected by the server as window.BG_CONFIG (see index.html).
 
 const _cfg     = window.BG_CONFIG || {};
@@ -9,7 +9,7 @@ const HOME_DEC = typeof _cfg.sky_dec === 'number' ? _cfg.sky_dec : 15.86;
 const HOME_RA_SPAN  = 4.74;
 const HOME_DEC_SPAN = 94.6;
 
-// Fixed view — no pan. dso-render.js reads these from global scope.
+// Fixed view - no pan. dso-render.js reads these from global scope.
 let panRA = 0, panDec = 0;
 let zoomLevel = 1;
 
@@ -24,7 +24,7 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
-// ── Projection (fixed — no pan, no zoom) ─────────────────────────────
+// ── Projection (fixed - no pan, no zoom) ─────────────────────────────
 function project(ra, dec, depth) {
   return [
     (1 - (ra  - (HOME_RA  - HOME_RA_SPAN  / 2)) / HOME_RA_SPAN)  * w,
@@ -32,19 +32,11 @@ function project(ra, dec, depth) {
   ];
 }
 
-// ── Helpers used by dso-render.js's buildBg ───────────────────────────
-function getDepth(mag) {
-  if (mag < 1) return 1.06; if (mag < 2) return 1.05; if (mag < 3) return 1.04;
-  if (mag < 4) return 1.03; if (mag < 5) return 1.02; if (mag < 6) return 1.01;
-  return 1.0;
-}
-
-// In ph-intercept the game is always fullscreen — starfield is never dimmed.
+// In ph-intercept the game is always fullscreen - starfield is never dimmed.
 window._startZenFade = function() {};
-let zenAlpha = 0;
 
 // ── Star cache (populated on data load) ──────────────────────────────
-let STARS = [], STAR_INFO = {};
+let STARS = [];
 let starCache = [], phases = [];
 
 // ── Main draw loop ────────────────────────────────────────────────────
@@ -118,7 +110,6 @@ function draw(t) {
 if (BG_MODE === 'starfield') {
   fetch('/static/stars-lite.json').then(r => r.json()).then(d => {
     STARS       = d.stars;
-    STAR_INFO   = d.info   || {};
     STAR_COLORS = d.colors || {};
     computePlanets();
     setInterval(computePlanets, 3600000);

@@ -48,6 +48,7 @@ async def _pihole_drop_session(http_client: httpx.AsyncClient) -> None:
         await http_client.delete(
             f"{PIHOLE_BASE}/auth",
             headers={"X-FTL-SID": sid},
+            timeout=0.5,
         )
     except Exception:
         pass
@@ -74,6 +75,7 @@ async def get_pihole_stats(http_client: httpx.AsyncClient) -> dict | None:
             "percent": round(q.get("percent_blocked", 0), 1),
             "gravity": data.get("gravity", {}).get("domains_being_blocked", 0),
             "blocking": None if b.get("error") else (b.get("blocking") == "enabled"),
+            "block_timer": None if b.get("error") else b.get("timer"),
         }
     except Exception:
         return None
@@ -126,6 +128,10 @@ async def _broadcast(events: list[dict]) -> None:
         try:
             q.put_nowait(payload)
         except asyncio.QueueFull:
+            try:
+                q.put_nowait(None)  # sentinel so generate() can exit cleanly
+            except asyncio.QueueFull:
+                pass
             _pihole_ws_clients.discard(q)
 
 

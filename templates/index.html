@@ -21,21 +21,22 @@
 
 <!-- BG config injected server-side so JS doesn't need a separate fetch -->
 <script type="application/json" id="bg-config">{{ bg_config | tojson }}</script>
+
+<div id="bg-image"></div>
+
 <script>
 window.BG_CONFIG = JSON.parse(document.getElementById('bg-config').textContent);
 if (window.BG_CONFIG.bg_image) {
-  document.getElementById('bg-image').style.backgroundImage = 'url(' + window.BG_CONFIG.bg_image + ')';
+  document.getElementById('bg-image').style.backgroundImage = 'url("' + window.BG_CONFIG.bg_image + '")';
 }
 </script>
-
-<div id="bg-image"></div>
 
 <canvas id="starfield"></canvas>
 <canvas id="pihole-canvas"></canvas>
 
-<a id="pihole-link" href="{{ pihole_dashboard | e }}" target="_blank" rel="noopener noreferrer">
+<div id="pihole-link" data-href="{{ pihole_dashboard | e }}">
   <img src="/static/icons/pihole.svg" alt="Pi-hole" draggable="false">
-</a>
+</div>
 
 <!-- Starfield deps (always loaded; no-ops when BG_MODE != starfield) -->
 <script src="/static/js/star-catalog.js"></script>

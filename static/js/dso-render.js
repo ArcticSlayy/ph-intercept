@@ -6,14 +6,14 @@ function drawClusterMembers(c, dso, xBase, yBase, xS, yS, zoom, outerR) {
   const members = clusterMembers.get(dso.name);
   if (!members) return;
   const zs = Math.sqrt(zoom);
-  // Cluster center in canvas space — used for radial density falloff
+  // Cluster center in canvas space - used for radial density falloff
   const cx = (xBase + panRA  - dso.ra)  * xS;
   const cy = (yBase + panDec - dso.dec) * yS;
   for (const m of members) {
     const dx = (xBase + panRA  - m.ra_h) * xS;
     const dy = (yBase + panDec - m.dec)  * yS;
     if (dx < -2 || dx > w + 2 || dy < -2 || dy > h + 2) continue;
-    // Fade opacity with distance from cluster center — mimics natural density profile
+    // Fade opacity with distance from cluster center - mimics natural density profile
     const dist = Math.hypot(dx - cx, dy - cy);
     const fade = Math.max(0, 1 - dist / (outerR * 1.1));
     if (fade < 0.01) continue;
@@ -65,8 +65,8 @@ function drawDSO(c, dx, dy, outerR, dso, ts) {
     c.restore();
   } else if (isCl) {
     const hasMem = clusterMembers.has(dso.name);
-    // If we have resolved members, the glow is just the unresolved halo — keep it subtle.
-    // Without members, the glow is the only representation — make it more visible.
+    // If we have resolved members, the glow is just the unresolved halo - keep it subtle.
+    // Without members, the glow is the only representation - make it more visible.
     const base = hasMem ? 0.013 : 0.016;
     const g = c.createRadialGradient(dx, dy, 0, dx, dy, outerR);
     g.addColorStop(0,    `rgba(${dso.color}, ${Math.min(0.9, (base*ts)).toFixed(4)})`);
@@ -107,7 +107,7 @@ function buildBg(t) {
     drawDSO(bgCtx, dx, dy, outerR, dso, 1);
     if (isCl) drawClusterMembers(bgCtx, dso, xBase, yBase, xS, yS, 1, outerR);
   }
-  // Stars — twinkling at bg update rate (~20fps), blit at native rate
+  // Stars - twinkling at bg update rate (~20fps), blit at native rate
   // Only draw mag<7 stars in bg (dim ones aren't visible at zoom=1 anyway)
   for (let i = 0; i < starCache.length; i++) {
     const sc = starCache[i];
@@ -139,7 +139,7 @@ function buildBg(t) {
       bgCtx.fillStyle = g; bgCtx.fill();
     }
   }
-  // Planets — use project() which uses current globals (zoom=1, pan=0 in non-zen)
+  // Planets - use project() which uses current globals (zoom=1, pan=0 in non-zen)
   for (const pl of planets) {
     const pd = pl.name === 'Moon' ? 1.10 : 1.08;
     const [px, py] = project(pl.ra, pl.dec, pd);

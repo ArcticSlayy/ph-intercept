@@ -44,7 +44,7 @@ function drawMoonPhase(ctx, cx, cy, r, glowR, elongDeg) {
   const elong = ((elongDeg % 360) + 360) % 360;
   const phi = elong * Math.PI / 180, cph = Math.cos(phi), PI2 = Math.PI / 2;
   const k = (1 - cph) / 2; // illuminated fraction: 0=new, 1=full
-  if (k < 0.02) return; // near new moon — not visible
+  if (k < 0.02) return; // near new moon - not visible
   const ga = Math.min(k * 0.44, 0.22); // glow fades proportionally for crescent phases
   const gr = ctx.createRadialGradient(cx, cy, r * 0.5, cx, cy, glowR);
   gr.addColorStop(0, `rgba(230,228,215,${ga})`); gr.addColorStop(1, 'rgba(230,228,215,0)');
@@ -53,7 +53,7 @@ function drawMoonPhase(ctx, cx, cy, r, glowR, elongDeg) {
   ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.clip();
   const LIT = 'rgba(230,228,215,0.9)', DARK = 'rgba(8,8,11,1)';
   ctx.fillStyle = LIT; ctx.fillRect(cx - r - 1, cy - r - 1, r * 2 + 2, r * 2 + 2);
-  if (k < 0.98) { // not full moon — draw shadow
+  if (k < 0.98) { // not full moon - draw shadow
     const xr = Math.abs(r * cph);
     ctx.fillStyle = DARK;
     ctx.beginPath();

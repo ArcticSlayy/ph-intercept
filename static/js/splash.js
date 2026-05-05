@@ -18,8 +18,7 @@
 
   // ── Phase windows [start, end] in ms ─────────────────────────────
   const PH_IN      = [0,    450];
-  const LINE_END   = [380, 1150];
-  const XHAIR_IN   = [1150, 1400];
+  const LINE_END   = [380,  750];
   const TAG_IN     = [1200, 1550];
   const FADE_OUT   = [2100, 2950];
   const GAME_START = 2250;
@@ -69,7 +68,7 @@
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, W, H);
 
-    // ── Layout — center the whole block vertically ────────────────
+    // ── Layout - center the whole block vertically ────────────────
     const phSize   = Math.min(W * 0.20, H * 0.22, 180);
     const tagSize  = Math.max(11, Math.min(W * 0.015, 16));
     const lineGap  = phSize * 0.58;
@@ -116,70 +115,62 @@
     ctx.fillText('PH', phX, phY + phDrift);
     ctx.restore();
 
-    // ── Converging lines ─────────────────────────────────────────
-    const lineT   = easeOut(prog(now, LINE_END[0], LINE_END[1]));
-    const lineAlp = ease(prog(now, LINE_END[0], LINE_END[0] + 200));
+    // ── Laser blast line (fires left → right) ────────────────────
+    const lineT   = prog(now, LINE_END[0], LINE_END[1]);
+    const lineAlp = ease(prog(now, LINE_END[0], LINE_END[0] + 55));
+    const tip     = lineT * W;
 
-    ctx.save();
-    ctx.globalAlpha = master * lineAlp;
-    ctx.strokeStyle = 'rgba(80, 160, 255, 0.65)';
-    ctx.lineWidth   = 0.75;
+    if (lineT > 0) {
+      const TRAIL = W * 0.30;
+      const tail  = Math.max(0, tip - TRAIL);
 
-    const cx       = W / 2;
-    const circR    = Math.min(H * 0.013, 11);  // reticle circle radius
-    const leftTip  = lerp(0, cx, lineT);
-    const rightTip = lerp(W, cx, lineT);
-
-    // Draw lines — leave a gap for the circle once converged
-    const gap = lineT >= 1 ? circR + 3 : 0;
-    if (leftTip  > gap)       { ctx.beginPath(); ctx.moveTo(0, lineY); ctx.lineTo(leftTip - gap, lineY); ctx.stroke(); }
-    if (rightTip < W - gap)   { ctx.beginPath(); ctx.moveTo(W, lineY); ctx.lineTo(rightTip + gap, lineY); ctx.stroke(); }
-
-    // Travelling tip glow
-    if (lineT > 0 && lineT < 1) {
-      [leftTip, rightTip].forEach(tx => {
-        const tipAlpha = 0.7 * (1 - Math.abs(lineT - 0.5) * 2);
-        const g = ctx.createRadialGradient(tx, lineY, 0, tx, lineY, 14);
-        g.addColorStop(0, `rgba(160, 210, 255, ${tipAlpha})`);
-        g.addColorStop(1, 'rgba(80, 160, 255, 0)');
-        ctx.fillStyle = g;
-        ctx.beginPath(); ctx.arc(tx, lineY, 14, 0, Math.PI * 2); ctx.fill();
-      });
-    }
-    ctx.restore();
-
-    // ── Reticle (circle + 4 arms extending outward) ───────────────
-    const xhairT = ease(prog(now, XHAIR_IN[0], XHAIR_IN[1]));
-    if (xhairT > 0) {
       ctx.save();
-      ctx.globalAlpha = master * xhairT;
-      ctx.shadowColor = 'rgba(100, 200, 255, 0.85)';
-      ctx.shadowBlur  = 10;
-      ctx.strokeStyle = 'rgba(140, 215, 255, 0.95)';
-      ctx.lineWidth   = 1.5;
+      ctx.globalAlpha = master * lineAlp;
+      ctx.lineCap = 'butt';
 
-      // Circle
-      ctx.beginPath();
-      ctx.arc(cx, lineY, circR, 0, Math.PI * 2);
-      ctx.stroke();
+      // Settled beam - dim persistent trace, always covers full 0..tip so there's no gap at the trail junction
+      ctx.strokeStyle = 'rgba(55, 125, 255, 0.13)'; ctx.lineWidth = 10;
+      ctx.beginPath(); ctx.moveTo(0, lineY); ctx.lineTo(tip, lineY); ctx.stroke();
+      ctx.strokeStyle = 'rgba(100, 185, 255, 0.28)'; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.moveTo(0, lineY); ctx.lineTo(tip, lineY); ctx.stroke();
+      ctx.strokeStyle = 'rgba(185, 220, 255, 0.62)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, lineY); ctx.lineTo(tip, lineY); ctx.stroke();
 
-      // Four arms extend outward from circle edge as xhairT goes 0→1
-      const armLen  = Math.min(H * 0.065, 56);
-      const armTip  = circR + 4 + armLen * xhairT;
+      // Hot trail - bright gradient from tail → tip, layered over settled
+      const g0 = ctx.createLinearGradient(tail, 0, tip, 0);
+      g0.addColorStop(0, 'rgba(50, 120, 255, 0)');
+      g0.addColorStop(1, 'rgba(50, 120, 255, 0.22)');
+      ctx.strokeStyle = g0; ctx.lineWidth = 12;
+      ctx.beginPath(); ctx.moveTo(tail, lineY); ctx.lineTo(tip, lineY); ctx.stroke();
 
-      // Vertical arms
-      ctx.beginPath(); ctx.moveTo(cx, lineY - circR - 4); ctx.lineTo(cx, lineY - armTip); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx, lineY + circR + 4); ctx.lineTo(cx, lineY + armTip); ctx.stroke();
+      const g1 = ctx.createLinearGradient(tail, 0, tip, 0);
+      g1.addColorStop(0, 'rgba(100, 190, 255, 0)');
+      g1.addColorStop(0.5, 'rgba(120, 200, 255, 0.42)');
+      g1.addColorStop(1, 'rgba(160, 220, 255, 0.75)');
+      ctx.strokeStyle = g1; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(tail, lineY); ctx.lineTo(tip, lineY); ctx.stroke();
 
-      // Horizontal stubs (short — the main line carries the horizontal weight)
-      const hArm = Math.min(armLen * 0.35, 18) * xhairT;
-      ctx.beginPath(); ctx.moveTo(cx - circR - 4, lineY); ctx.lineTo(cx - circR - 4 - hArm, lineY); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx + circR + 4, lineY); ctx.lineTo(cx + circR + 4 + hArm, lineY); ctx.stroke();
+      ctx.shadowColor = 'rgba(200, 235, 255, 0.90)';
+      ctx.shadowBlur  = 6;
+      const g2 = ctx.createLinearGradient(tail, 0, tip, 0);
+      g2.addColorStop(0, 'rgba(160, 210, 255, 0)');
+      g2.addColorStop(0.4, 'rgba(210, 235, 255, 0.80)');
+      g2.addColorStop(1, 'rgba(255, 255, 255, 1)');
+      ctx.strokeStyle = g2; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(tail, lineY); ctx.lineTo(tip, lineY); ctx.stroke();
+      ctx.shadowBlur = 0;
 
-      // Center dot
-      ctx.shadowBlur = 5;
-      ctx.fillStyle  = 'rgba(210, 240, 255, 1)';
-      ctx.beginPath(); ctx.arc(cx, lineY, 2, 0, Math.PI * 2); ctx.fill();
+      // Tip bloom - tight and very bright while travelling
+      if (lineT < 1) {
+        const bg = ctx.createRadialGradient(tip, lineY, 0, tip, lineY, 18);
+        bg.addColorStop(0,   'rgba(255, 255, 255, 1.0)');
+        bg.addColorStop(0.15,'rgba(220, 245, 255, 0.90)');
+        bg.addColorStop(0.45,'rgba(110, 195, 255, 0.55)');
+        bg.addColorStop(1,   'rgba(50, 140, 255, 0)');
+        ctx.fillStyle = bg;
+        ctx.beginPath(); ctx.arc(tip, lineY, 18, 0, Math.PI * 2); ctx.fill();
+      }
+
       ctx.restore();
     }
 

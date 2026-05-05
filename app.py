@@ -1,4 +1,4 @@
-"""ph-intercept — Pi-hole DNS game."""
+"""ph-intercept - Pi-hole DNS game."""
 
 import asyncio
 from contextlib import asynccontextmanager
@@ -33,9 +33,9 @@ async def lifespan(_app: FastAPI):
     except asyncio.CancelledError:
         pass
     try:
-        async with asyncio.timeout(3.0):
+        async with asyncio.timeout(1.0):
             await drop_session(_http_client)
-    except BaseException:
+    except Exception:
         pass
     await _http_client.aclose()
 
@@ -44,7 +44,7 @@ app = FastAPI(lifespan=lifespan)
 _base = Path(__file__).parent
 templates = Jinja2Templates(directory=_base / "templates")
 app.mount("/static", StaticFiles(directory=_base / "static"), name="static")
-app.mount("/bg", StaticFiles(directory=_base / "static" / "bg"), name="bg")
+app.mount("/bg", StaticFiles(directory=_base / "static" / "bg", check_dir=False), name="bg")
 
 
 class CacheStaticMiddleware(BaseHTTPMiddleware):
@@ -72,7 +72,6 @@ async def index(request: Request):
             "bg_image":   BG_IMAGE,
             "sky_ra":     preset["ra"],
             "sky_dec":    preset["dec"],
-            "sky_label":  preset["label"],
             "return_url": RETURN_URL,
         },
     })
@@ -89,6 +88,7 @@ async def pihole_stats():
         "blocked":  data.get("blocked"),
         "gravity":  data.get("gravity"),
         "blocking": data.get("blocking"),
+        "block_timer": data.get("block_timer"),
     }
 
 
@@ -113,6 +113,8 @@ async def pihole_events():
         try:
             while True:
                 payload = await q.get()
+                if payload is None:  # sentinel from _broadcast on queue overflow
+                    break
                 yield f"data: {payload}\n\n"
         except asyncio.CancelledError:
             pass

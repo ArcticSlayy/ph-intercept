@@ -8,8 +8,8 @@ BG_MODE     = "image" if BG_IMAGE else os.environ.get("BG_MODE", "starfield").lo
 SKY_PRESET  = os.environ.get("SKY_PRESET", "summer_triangle").lower()
 
 SKY_PRESETS = {
-    "summer_triangle": {"ra": 19.27, "dec": 15.86, "label": "Summer Triangle"},
-    "orion":           {"ra":  5.60, "dec":  0.00, "label": "Orion"},
-    "scorpius":        {"ra": 17.00, "dec": -30.0,  "label": "Scorpius"},
-    "southern_cross":  {"ra": 12.47, "dec": -60.0,  "label": "Southern Cross"},
+    "summer_triangle": {"ra": 19.27, "dec": 15.86},
+    "orion":           {"ra":  5.60, "dec":  0.00},
+    "scorpius":        {"ra": 17.00, "dec": -30.0},
+    "southern_cross":  {"ra": 12.47, "dec": -60.0},
 }
