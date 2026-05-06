@@ -32,12 +32,18 @@ services:
 
     # Create a .env file in this directory with:
     #   PIHOLE_PASSWORD=your_pihole_app_password
+    # If using Portainer: comment this section out. See comments for environment.
     env_file:
       - .env
 
     environment:
       # Pi-hole v6 API endpoint. Replace with your Pi-hole's IP:port/api
       PIHOLE_URL: "http://your.server.ip.address:your_pihole_port/api"
+
+      # Uncomment this section if using Portainer.
+      # Set "PIHOLE_PASSWORD" as environment variable in Portainer.
+      #   Make the value "your_pihole_app_password"
+      # PIHOLE_PASSWORD: ${PIHOLE_PASSWORD}
 
       # Optional: where ESC navigates to (like your homelab dashboard or homepage).
       # Leave blank ("") to disable ESC navigation.
@@ -87,7 +93,7 @@ Open `http://your-host:4653`.
 
 ## Portainer Notes
 
-- **Web Editor deploys:** remove the `env_file:` block and set `PIHOLE_PASSWORD` under the stack's **Environment variables** instead.
+- **Web Editor deploys:** set `PIHOLE_PASSWORD` under the stack's **Environment variables**. Make 
 - **Custom backgrounds:** drop files into `/data/compose/<stack-id>/bg/` on the Portainer host (where the `./bg` bind mount resolves).
 
 ## Entities
