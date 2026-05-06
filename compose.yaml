@@ -5,17 +5,18 @@ services:
     container_name: ph-intercept
     restart: unless-stopped
 
-    # Create a .env file in this directory with:
-    #   PIHOLE_PASSWORD=your_pihole_app_password
-    env_file:
-      - .env
-
     environment:
-      # Pi-hole v6 API endpoint. Replace with your Pi-hole's IP:port/api
-      PIHOLE_URL: "http://your.server.ip.address:your_pihole_port/api"
+      # REQUIRED: Pi-hole v6 API endpoint
+      # Example: "http://192.168.1.2:8053/api"
+      PIHOLE_URL: "http://CHANGE.ME:PORT/api"
 
-      # Optional: where ESC navigates to (like your homelab dashboard or homepage).
-      # Leave blank ("") to restart on ESC instead.
+      # CLI users: Create a .env file in the same dir as this compose file with:
+      #  PIHOLE_PASSWORD=your_pihole_app_password
+      # Portainer Web users: Add the environment variable: PIHOLE_PASSWORD=your_pihole_app_password
+      PIHOLE_PASSWORD: ${PIHOLE_PASSWORD}
+
+      # Optional: where ESC navigates to (like your homelab dashboard or homepage)
+      # Leave blank ("") to disable ESC entirely
       RETURN_URL: ""
 
       # Background style: starfield | dark | nebula
@@ -25,23 +26,24 @@ services:
       #   summer_triangle | orion | scorpius | southern_cross
       SKY_PRESET: summer_triangle
 
-      # Set BG_IMAGE to use a custom background. URL for an image, or /bg/your-filename.jpg.
-      # Changing this from ("") will override BG_MODE and show your custom image instead.
+      # Set BG_IMAGE to use a custom background. URL for an image, or /bg/your-filename.jpg
+      # If set, BG_IMAGE overrides BG_MODE entirely
       BG_IMAGE: ""
-
+    
     volumes:
-      - ./bg:/app/static/bg:ro
+      # Portainer Web users: This will resolve to /data/compose/<stack-id>/bg/
+      - ./bg:/app/static/bg
 
     ports:
       # Host port : container port. Change the left side if 4653 is taken
       - "4653:4653"
 
-    # Optional: point DNS at your Pi-hole (if used for DNS resolution) or resolver directly (like Unbound).
+    # Optional: point DNS at your Pi-hole (if used for DNS resolution) or resolver directly (like Unbound)
     # dns:
     #   - your.dns.dockernet.ip
 
-    # Optional: static IP on an existing Docker network.
-    # Uncomment both networks blocks if you need this.
+    # Optional: only needed if you use static IPs on a custom Docker network
+    # Uncomment both networks blocks if you need this
     # networks:
     #   dns_net:
     #     ipv4_address: this.container.dockernet.ip

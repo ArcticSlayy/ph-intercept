@@ -12,13 +12,15 @@ Designed to be dropped in alongside an existing Pi-hole v6 setup with no extra d
 
 ## Quick Start
 
-**1.** Create a `.env` file:
+**1.** Get your Pi-hole **app password** (not your web login password): from the Pi-hole admin panel, go to **Settings → Web interface / API → Configure app password**.
 
-```env
-PIHOLE_PASSWORD=your_pihole_app_password
-```
+- **CLI users:** Create a `.env` file in the same directory as your `compose.yaml`:
 
-This is your Pi-hole **app password**, not your web login password. To get it: from the Pi-hole admin panel, go to **Settings → Web interface / API → Configure app password**.
+  ```env
+  PIHOLE_PASSWORD=your_pihole_app_password
+  ```
+
+- **Portainer users:** Skip the `.env` file. Add `PIHOLE_PASSWORD` as an environment variable directly in the Portainer stack config.
 
 **2.** Create a `compose.yaml` (copy the example below or grab [`compose.yaml`](compose.yaml) from the repo) and update `PIHOLE_URL` to your Pi-hole's address:
 
@@ -30,23 +32,18 @@ services:
     container_name: ph-intercept
     restart: unless-stopped
 
-    # Create a .env file in this directory with:
-    #   PIHOLE_PASSWORD=your_pihole_app_password
-    # If using Portainer: comment this section out. See comments for environment.
-    env_file:
-      - .env
-
     environment:
-      # Pi-hole v6 API endpoint. Replace with your Pi-hole's IP:port/api
-      PIHOLE_URL: "http://your.server.ip.address:your_pihole_port/api"
+      # REQUIRED: Pi-hole v6 API endpoint
+      # Example: "http://192.168.1.2:8053/api"
+      PIHOLE_URL: "http://CHANGE.ME:PORT/api"
 
-      # Uncomment this section if using Portainer.
-      # Set "PIHOLE_PASSWORD" as environment variable in Portainer.
-      #   Make the value "your_pihole_app_password"
-      # PIHOLE_PASSWORD: ${PIHOLE_PASSWORD}
+      # CLI users: Create a .env file in the same dir as this compose file with:
+      #  PIHOLE_PASSWORD=your_pihole_app_password
+      # Portainer Web users: Add the environment variable: PIHOLE_PASSWORD=your_pihole_app_password
+      PIHOLE_PASSWORD: ${PIHOLE_PASSWORD}
 
-      # Optional: where ESC navigates to (like your homelab dashboard or homepage).
-      # Leave blank ("") to disable ESC navigation.
+      # Optional: where ESC navigates to (like your homelab dashboard or homepage)
+      # Leave blank ("") to disable ESC entirely
       RETURN_URL: ""
 
       # Background style: starfield | dark | nebula
@@ -56,22 +53,24 @@ services:
       #   summer_triangle | orion | scorpius | southern_cross
       SKY_PRESET: summer_triangle
 
-      # Set BG_IMAGE to use a custom background. URL or /bg/your-filename.jpg.
-      # Setting this overrides BG_MODE and shows your image instead.
+      # Set BG_IMAGE to use a custom background. URL for an image, or /bg/your-filename.jpg
+      # If set, BG_IMAGE overrides BG_MODE entirely
       BG_IMAGE: ""
 
     volumes:
-      - ./bg:/app/static/bg:ro
+      # Portainer Web users: This will resolve to /data/compose/<stack-id>/bg/
+      - ./bg:/app/static/bg
 
     ports:
-      # Host port : container port. Change the left side if 4653 is taken.
+      # Host port : container port. Change the left side if 4653 is taken
       - "4653:4653"
 
-    # Optional: point DNS at your Pi-hole or resolver (e.g. Unbound).
+    # Optional: point DNS at your Pi-hole (if used for DNS resolution) or resolver directly (like Unbound)
     # dns:
     #   - your.dns.dockernet.ip
 
-    # Optional: static IP on an existing Docker network.
+    # Optional: only needed if you use static IPs on a custom Docker network
+    # Uncomment both networks blocks if you need this
     # networks:
     #   dns_net:
     #     ipv4_address: this.container.dockernet.ip
@@ -175,14 +174,14 @@ All configuration is via environment variables in `compose.yaml`.
 
 | Variable | Description |
 |----------|-------------|
-| `PIHOLE_PASSWORD` | Pi-hole app password (set in `.env`, not compose.yaml). Get it from **Settings → Web interface / API → Configure app password**. |
+| `PIHOLE_PASSWORD` | Pi-hole app password. CLI: set in a `.env` file. Portainer: add as an environment variable in the stack. Get it from **Settings → Web interface / API → Configure app password**. |
 | `PIHOLE_URL` | Pi-hole v6 API base URL, e.g. `http://192.168.1.x:8053/api` |
 
 ### Optional
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `RETURN_URL` | *(empty)* | URL that Escape navigates to. |
+| `RETURN_URL` | *(empty)* | URL that ESC navigates to. Leave blank to disable ESC entirely. |
 | `BG_MODE` | `starfield` | `starfield` · `dark` · `nebula` |
 | `SKY_PRESET` | `summer_triangle` | `summer_triangle` · `orion` · `scorpius` · `southern_cross` |
 | `BG_IMAGE` | *(empty)* | Image URL or `/bg/filename.jpg`. Overrides `BG_MODE` when set. |
