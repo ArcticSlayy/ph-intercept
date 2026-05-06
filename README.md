@@ -91,10 +91,9 @@ Open `http://your-host:4653`.
 
 ---
 
-## Portainer Notes
+## Portainer Note for BG
 
-- **Web Editor deploys:** set `PIHOLE_PASSWORD` under the stack's **Environment variables**. Make 
-- **Custom backgrounds:** drop files into `/data/compose/<stack-id>/bg/` on the Portainer host (where the `./bg` bind mount resolves).
+- Drop image files into `/data/compose/<stack-id>/bg/` on the Portainer host (where the `./bg` bind mount resolves).
 
 ## Entities
 
