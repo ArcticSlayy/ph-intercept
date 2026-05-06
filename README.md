@@ -85,6 +85,11 @@ Open `http://your-host:4653`.
 
 ---
 
+## Portainer Notes
+
+- **Web Editor deploys:** remove the `env_file:` block and set `PIHOLE_PASSWORD` under the stack's **Environment variables** instead.
+- **Custom backgrounds:** drop files into `/data/compose/<stack-id>/bg/` on the Portainer host (where the `./bg` bind mount resolves).
+
 ## Entities
 
 Each DNS query spawns an entity. Appearance scales with how many times that domain has appeared recently:
