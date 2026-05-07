@@ -33,9 +33,10 @@ async def _pihole_ensure_auth(http_client: httpx.AsyncClient) -> bool:
                 content=json.dumps({"password": os.environ.get("PIHOLE_PASSWORD", "")}),
                 headers={"Content-Type": "application/json"},
             )
-            sid = resp.json().get("session", {}).get("sid")
-            if sid:
-                _pihole_sid = sid
+            session = resp.json().get("session", {})
+            if session.get("valid"):
+                # sid is None when Pi-hole has no password (open/passwordless mode)
+                _pihole_sid = session.get("sid") or ""
                 return True
         except Exception:
             pass
@@ -61,7 +62,7 @@ async def get_pihole_stats(http_client: httpx.AsyncClient) -> dict | None:
     try:
         if not await _pihole_ensure_auth(http_client):
             return None
-        headers = {"X-FTL-SID": _pihole_sid}
+        headers = {"X-FTL-SID": _pihole_sid} if _pihole_sid else {}
         summary, blocking_resp = await asyncio.gather(
             http_client.get(f"{PIHOLE_BASE}/stats/summary", headers=headers),
             http_client.get(f"{PIHOLE_BASE}/dns/blocking", headers=headers),
@@ -91,7 +92,7 @@ async def toggle_blocking(http_client: httpx.AsyncClient, enable: bool, timer: i
         resp = await http_client.post(
             f"{PIHOLE_BASE}/dns/blocking",
             content=json.dumps({"blocking": enable, "timer": timer}),
-            headers={"X-FTL-SID": _pihole_sid, "Content-Type": "application/json"},
+            headers={**( {"X-FTL-SID": _pihole_sid} if _pihole_sid else {} ), "Content-Type": "application/json"},
         )
         if resp.status_code == 401:
             await _pihole_drop_session(http_client)
@@ -109,7 +110,7 @@ async def trigger_gravity_update(http_client: httpx.AsyncClient) -> dict:
             return {"error": "auth failed"}
         resp = await http_client.post(
             f"{PIHOLE_BASE}/action/gravity",
-            headers={"X-FTL-SID": _pihole_sid},
+            headers={"X-FTL-SID": _pihole_sid} if _pihole_sid else {},
             timeout=10.0,
         )
         if resp.status_code == 401:
@@ -169,7 +170,7 @@ async def query_poller(http_client: httpx.AsyncClient) -> None:
 
             resp = await http_client.get(
                 f"{PIHOLE_BASE}/queries?limit=50",
-                headers={"X-FTL-SID": _pihole_sid},
+                headers={"X-FTL-SID": _pihole_sid} if _pihole_sid else {},
                 timeout=1.5,
             )
             if resp.status_code == 401:
