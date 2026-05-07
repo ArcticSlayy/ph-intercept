@@ -4,6 +4,14 @@ All notable changes to ph-intercept are documented here.
 
 ---
 
+## [1.1.1] - 2026-05-07
+
+### Fixed
+
+- **Sprite visibility after sleep/wake** -- entity sprites (friendlies and baddies) could become invisible after the computer slept and resumed. The browser silently clears off-screen canvas pixel data on resume; the sprite cache is now invalidated on visibility restore so sprites are rebuilt on next use.
+
+---
+
 ## [1.1.0] - 2026-05-06
 
 ### Added

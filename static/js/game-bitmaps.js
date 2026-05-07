@@ -391,7 +391,10 @@ function drawBmp(ctx, bmp, cx, cy, color, glowColor, px, solid = false) {
 
 // Sprite cache: pre-renders (bmp, color, glow, px) to an OffscreenCanvas once,
 // then game.js uses ctx.drawImage per entity instead of N shadow-blurred fillRects.
+// Off-screen canvas pixel data can be silently cleared by the browser on sleep/wake
+// (GPU resource reclaim on resume). clearSpriteCache() forces a full rebuild on next use.
 const _spriteCache = new Map();
+function clearSpriteCache() { _spriteCache.clear(); }
 function getCachedSprite(bmp, color, glowColor, px) {
   let inner = _spriteCache.get(bmp);
   if (!inner) { inner = new Map(); _spriteCache.set(bmp, inner); }

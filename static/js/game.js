@@ -2341,6 +2341,7 @@
     if (_onVisible) document.removeEventListener('visibilitychange', _onVisible);
     _onVisible = function() {
       if (document.visibilityState !== 'visible') return;
+      clearSpriteCache();
       fetchPiholeStats();
       if (!evtSource) connect();
       // reset interval so next tick is exactly 1s from now, not 0–999ms
