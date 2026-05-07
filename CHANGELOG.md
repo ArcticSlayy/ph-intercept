@@ -4,6 +4,15 @@ All notable changes to ph-intercept are documented here.
 
 ---
 
+## [1.1.2] - 2026-05-07
+
+### Fixed
+
+- **Game loop revival on tab switch** -- switching away from the tab and back could leave the canvas permanently blank until a page refresh. Browsers can freeze or drop a pending `requestAnimationFrame` callback when a tab is backgrounded; the visibility-restore handler now cancels and reschedules the rAF loop so it always resumes correctly.
+- **Release notes scope** -- GitHub releases now show only the current version's changelog section instead of the full history.
+
+---
+
 ## [1.1.1] - 2026-05-07
 
 ### Fixed

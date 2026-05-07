@@ -7,7 +7,7 @@
   let W = 0, H = 0;
 
   let safeBottom = 0, hudSH = 108;
-  let active = false, evtSource = null, sseRetryDelay = 3000;
+  let active = false, evtSource = null, sseRetryDelay = 3000, _rafId = null;
   let lastT = 0, lastSpawn = 0, shipX = 0, shipY = 0, lastGun = 0;
   let lastEnemyAt = 0;
   let activeEnemies = 0, idleBlend = 0;
@@ -347,8 +347,9 @@
 
   // ── Game tick ─────────────────────────────────────────────────────
   function tick(t) {
+    _rafId = null;
     if (!active) return;
-    requestAnimationFrame(tick);
+    _rafId = requestAnimationFrame(tick);
     const dt = Math.min(t - lastT, 80);
     lastT = t;
 
@@ -2347,13 +2348,15 @@
       // reset interval so next tick is exactly 1s from now, not 0–999ms
       if (hudStatsPollTimer) { clearInterval(hudStatsPollTimer); }
       hudStatsPollTimer = setInterval(fetchPiholeStats, 1000);
+      // Revive rAF loop if the browser froze/dropped the pending callback
+      if (active) { if (_rafId !== null) cancelAnimationFrame(_rafId); _rafId = requestAnimationFrame(tick); }
     };
     document.addEventListener('visibilitychange', _onVisible);
     connect();
     requestAnimationFrame(t => {
       lastT = t; lastSpawn = t;
       canvas.style.opacity = '1';  // triggers the 0.6s transition after first paint
-      requestAnimationFrame(tick);
+      _rafId = requestAnimationFrame(tick);
     });
   };
 
@@ -2376,7 +2379,7 @@
     if (evtSource) { evtSource.close(); evtSource = null; }
     if (_onVisible) { document.removeEventListener('visibilitychange', _onVisible); _onVisible = null; }
     setTimeout(() => {
-      active = false;  // stop tick only after fade completes - game keeps running during fade
+      active = false; if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null; }
       ctx.clearRect(0, 0, W, H);
       shipPowerState = 'up'; gunCheckState = 0; lastEnemyAt = 0;
       carrierState = 'none'; carrierY = 0; carrierRestY = 0;
