@@ -14,7 +14,7 @@ _pihole_auth_lock: asyncio.Lock = asyncio.Lock()
 _pihole_ws_clients: set = set()
 _pihole_last_q_time: float = 0.0
 
-_BLOCKED_STATUS_STR = frozenset(["BLOCK", "GRAVITY", "REGEX", "BLACKLIST", "SPECIAL"])
+_BLOCKED_STATUS_STR = frozenset(["BLOCK", "GRAVITY", "REGEX", "BLACKLIST", "DENYLIST", "SPECIAL"])
 _BLOCKED_STATUS_INT = frozenset([1, 4, 5, 6, 7, 8, 9, 10, 11, 15, 16])
 _CACHE_STATUS_INT   = frozenset([3])
 _CACHE_STATUS_STR   = frozenset(["CACHE"])

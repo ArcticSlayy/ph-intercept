@@ -4,6 +4,15 @@ All notable changes to ph-intercept are documented here.
 
 ---
 
+## [1.1.3] - 2026-05-07
+
+### Fixed
+
+- **Domain Management blocks** -- domains blocked via Pi-hole's exact denylist now correctly intercepted as enemies. Thanks to [@AzuraLemonade](https://github.com/AzuraLemonade).
+- **Embedding** -- removed the `X-Frame-Options: DENY` header; PH Intercept can now be embedded in external dashboards. Thanks to [@AzuraLemonade](https://github.com/AzuraLemonade).
+
+---
+
 ## [1.1.2] - 2026-05-07
 
 ### Fixed

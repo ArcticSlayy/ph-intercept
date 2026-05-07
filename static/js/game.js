@@ -94,8 +94,8 @@
   const SHIP_QUOTES = {
     protector:  ["Never give up, never surrender!", "By Grabthar's hammer, by the suns of Warvan, you shall be avenged.", "EXPLAIN.", "I'm just the guy who dies in episode 3!", "Can you form some sort of rudimentary lathe?", "Are you enjoying your Kep-mok blood ticks, Dr. Lazarus?", "It's all real."],
     falcon:     ["Never tell me the odds!", "I'd just as soon kiss a Wookiee.", "BUT SIR!!", "I am a Jedi, like my father before me.", "I can fly anything.", "It's not my fault!", "Shut him up or shut him down!"],
-    swordfish:  ["Whatever happens, happens.", "I'm not going there to die. I'm going to find out if I'm really alive.", "I'm not a bounty hunter for the money.", "I love a man who can cook.", "Ed and Ein are hungry!"],
-    enterprise: ["Live long and prosper.", "The needs of the many outweigh the needs of the few, or the one.", "He's dead, Jim.", "Risk is our business.", "Fascinating."],
+    swordfish:  ["Bang.", "Whatever happens, happens.", "I'm not going there to die. I'm going to find out if I'm really alive.", "I'm not a bounty hunter for the money.", "I love a man who can cook.", "Ed and Ein are hungry!"],
+    enterprise: ["Will you.. Please... Sit down?", "Live long and prosper.", "The needs of the many outweigh the needs of the few, or the one.", "He's dead, Jim.", "Risk is our business.", "Fascinating."],
   };
   const DISABLE_OPTIONS = [
     { label: '10 SEC', timer: 10,  ms: 10000 },

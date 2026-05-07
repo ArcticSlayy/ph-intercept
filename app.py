@@ -51,7 +51,6 @@ class ResponseHeaderMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
         if request.url.path.startswith("/static/"):
             if request.url.path.endswith(('.woff2', '.woff', '.ttf', '.otf')):
                 response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
