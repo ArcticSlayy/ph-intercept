@@ -751,6 +751,12 @@
       carrierY = (H + 240) + (carrierRestY - (H + 240)) * ease;
       if (cp >= 1) { carrierState = 'present'; carrierY = carrierRestY; }
     }
+    // Guard: carrier must not stay present while ship is up (happens when startup completes before
+    // carrier finishes arriving - e.g. rapid remote toggle or returning from a backgrounded tab)
+    if (shipPowerState === 'up' && carrierState === 'present') {
+      carrierState = 'leaving'; carrierLeavingAt = t; launchAt = t;
+      crewMembers = []; crewNextSpawn = 0; lastFuelAt = 0;
+    }
     if (carrierState === 'leaving') {
       const lp = Math.min(1, (t - carrierLeavingAt) / CARRIER_LEAVE_DUR);
       carrierY = carrierRestY + lp * lp * (H + 240 - carrierRestY);
