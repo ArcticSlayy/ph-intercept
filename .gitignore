@@ -1,2 +1,12 @@
 .env
 compose.override.yaml
+
+__pycache__/
+*.pyc
+*.pyo
+
+tests/
+.pytest_cache/
+*.pytest_cache
+pytest.ini
+.coverage

@@ -4,6 +4,10 @@ services:
     hostname: ph-intercept
     container_name: ph-intercept
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256m
 
     environment:
       # REQUIRED: Pi-hole v6 API endpoint
@@ -29,7 +33,11 @@ services:
       # Set BG_IMAGE to use a custom background. URL for an image, or /bg/your-filename.jpg
       # If set, BG_IMAGE overrides BG_MODE entirely
       BG_IMAGE: ""
-    
+
+      # SSL certificate verification. Set to "false" if Pi-hole uses HTTPS
+      #  with a self-signed certificate. Leave as "true" for HTTP or valid HTTPS.
+      PIHOLE_VERIFY_SSL: "true"
+
     volumes:
       # Portainer Web users: This will resolve to /data/compose/<stack-id>/bg/
       - ./bg:/app/static/bg

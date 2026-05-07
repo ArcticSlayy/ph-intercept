@@ -31,6 +31,10 @@ services:
     hostname: ph-intercept
     container_name: ph-intercept
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256m
 
     environment:
       # REQUIRED: Pi-hole v6 API endpoint
@@ -56,6 +60,10 @@ services:
       # Set BG_IMAGE to use a custom background. URL for an image, or /bg/your-filename.jpg
       # If set, BG_IMAGE overrides BG_MODE entirely
       BG_IMAGE: ""
+
+      # SSL certificate verification. Set to "false" if Pi-hole uses HTTPS
+      # with a self-signed certificate. Leave as "true" for HTTP or valid HTTPS.
+      PIHOLE_VERIFY_SSL: "true"
 
     volumes:
       # Portainer Web users: This will resolve to /data/compose/<stack-id>/bg/
@@ -96,15 +104,15 @@ Open `http://your-host:4653`.
 
 ## Entities
 
-Each DNS query spawns an entity. Appearance scales with how many times that domain has appeared recently:
+Each DNS query spawns an entity. Tier scales with how many times that domain has queried while the entity is still on screen:
 
 **Allowed queries:** friendly ships traveling across the screen. Cache-answered queries move faster than upstream-answered ones.
 
 | Tier | Condition | Shape | Color |
 |------|-----------|-------|-------|
-| 1 | First sighting | Rounded shuttle · Delta wing · X-wing | Green · Blue · Lime |
-| 2 | Seen twice | Heavy transport | Cyan |
-| 3+ | Three or more | Capital ship | Gold |
+| 1 | First query | Rounded shuttle · Delta wing · X-wing | Green · Blue · Lime |
+| 2 | Queried again while on screen | Heavy transport | Cyan |
+| 3+ | Three or more queries while on screen | Capital ship | Gold |
 
 **Blocked queries:** enemies the ship targets and destroys. A domain blocked again while still on screen mutates its sprite to the next tier in place.
 
@@ -142,27 +150,32 @@ A strip across the bottom, divided into four panels:
 
 <img width="1712" height="103" alt="image" src="https://github.com/user-attachments/assets/0a577b39-6722-4e4d-9f5e-e44488284042" />
 
+A hamburger button at the left edge of the HUD opens the **Settings** panel, which includes:
+
+- **Friendlies** -- show or hide friendly (allowed) entities
+- **Domain** -- show or hide the domain label beneath each entity
+- **Client** -- show the requesting client (IP or hostname) as a label per entity
+- **Pi-hole** -- link to the Pi-hole admin panel
+
+Display settings are saved to `localStorage` and restored on next load.
+
 ---
 
 ## The background
 
-When `BG_MODE=starfield`, the background renders a real section of the night sky from an accurate star catalog (~12,200 stars to magnitude 6.8, color-coded by spectral type). Positions use equatorial coordinates; what you see is where the stars actually are.
+Three modes are available via `BG_MODE`:
+
+**`starfield` (default):** Renders a real section of the night sky from an accurate star catalog (~12,200 stars to magnitude 6.8, color-coded by spectral type). Positions use equatorial coordinates; what you see is where the stars actually are. The sky region is set by `SKY_PRESET`.
 
 Star data is from the **HYG Database** by David Nash ([astronexus.com](https://astronexus.com)), combining Hipparcos (ESA) and the Yale Bright Star Catalogue.
-
-Deep sky objects rendered:
-
-| Type | Objects |
-|------|---------|
-| Emission nebulae | Lagoon, Trifid, Omega, Eagle, Crescent, North America |
-| Planetary nebulae | Ring, Dumbbell, Helix |
-| Supernova remnants | Eastern Veil, Western Veil (Cygnus Loop) |
-| Globular clusters | M2, M4, M5, M10, M12, M13, M14, M15, M19, M22, M28, M54, M55, M56, M62, M69, M70, M71, M72, M75, M80, M92, M107, and more |
-| Open clusters | M6 (Butterfly), M7 (Ptolemy's Cluster), and others |
 
 **Planets:** Mars, Jupiter, Saturn (with ring), and the Moon are computed from real orbital elements and appear at their actual sky positions, updated hourly.
 
 **Transients:** occasional satellite passes and meteors, including the ISS.
+
+**`nebula`:** A procedurally generated nebula. Overlapping color lobes with value noise, dust lanes, and a synthetic star layer. Fully GPU-rendered, no catalog data.
+
+**`dark`:** Plain black background. No canvas rendering overhead.
 
 ---
 
@@ -185,6 +198,7 @@ All configuration is via environment variables in `compose.yaml`.
 | `BG_MODE` | `starfield` | `starfield` · `dark` · `nebula` |
 | `SKY_PRESET` | `summer_triangle` | `summer_triangle` · `orion` · `scorpius` · `southern_cross` |
 | `BG_IMAGE` | *(empty)* | Image URL or `/bg/filename.jpg`. Overrides `BG_MODE` when set. |
+| `PIHOLE_VERIFY_SSL` | `true` | Set to `false` if Pi-hole uses HTTPS with a self-signed certificate. |
 
 ---
 

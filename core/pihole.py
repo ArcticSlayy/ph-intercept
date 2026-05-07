@@ -1,10 +1,13 @@
 import asyncio
 import json
+import logging
 import os
 
 import httpx
 
 from .config import PIHOLE_BASE
+
+logger = logging.getLogger(__name__)
 
 _pihole_sid: str | None = None
 _pihole_auth_lock: asyncio.Lock = asyncio.Lock()
@@ -95,8 +98,9 @@ async def toggle_blocking(http_client: httpx.AsyncClient, enable: bool, timer: i
             return {"error": "session expired"}
         data = resp.json()
         return {"blocking": data["blocking"] == "enabled" if "blocking" in data else enable}
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        logger.exception("toggle_blocking failed")
+        return {"error": "internal error"}
 
 
 async def trigger_gravity_update(http_client: httpx.AsyncClient) -> dict:
@@ -116,8 +120,9 @@ async def trigger_gravity_update(http_client: httpx.AsyncClient) -> dict:
         return {"ok": True}
     except httpx.TimeoutException:
         return {"error": "timeout"}
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        logger.exception("trigger_gravity_update failed")
+        return {"error": "internal error"}
 
 
 async def _broadcast(events: list[dict]) -> None:

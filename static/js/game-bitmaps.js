@@ -140,7 +140,7 @@ const DRONE_BMP = [
 ];
 const DRONE_PX = 3;
 const DRONE_DEPLOY_THRESHOLD = 5;
-const DRONE_RECALL_THRESHOLD = 1;
+const DRONE_RECALL_THRESHOLD = 2;
 const DRONE_FIRE_INTERVAL = 900;
 
 // Down-arrow - gravity update button in HUD (5×5)
@@ -387,4 +387,23 @@ function drawBmp(ctx, bmp, cx, cy, color, glowColor, px, solid = false) {
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
   }
+}
+
+// Sprite cache: pre-renders (bmp, color, glow, px) to an OffscreenCanvas once,
+// then game.js uses ctx.drawImage per entity instead of N shadow-blurred fillRects.
+const _spriteCache = new Map();
+function getCachedSprite(bmp, color, glowColor, px) {
+  let inner = _spriteCache.get(bmp);
+  if (!inner) { inner = new Map(); _spriteCache.set(bmp, inner); }
+  const key = `${color}|${glowColor}|${px}`;
+  if (inner.has(key)) return inner.get(key);
+  const cols = bmpW(bmp), rows = bmpH(bmp);
+  const pad = 10; // room for shadowBlur bleed
+  const w = cols * px + pad * 2, h = rows * px + pad * 2;
+  const oc = document.createElement('canvas');
+  oc.width = w; oc.height = h;
+  drawBmp(oc.getContext('2d'), bmp, w / 2, h / 2, color, glowColor, px);
+  const entry = { canvas: oc, w, h };
+  inner.set(key, entry);
+  return entry;
 }

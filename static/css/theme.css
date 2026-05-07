@@ -5,6 +5,7 @@
 :root {
   --bg:   #08080b;
   --mono: 'IBM Plex Mono', monospace;
+  --sab:  env(safe-area-inset-bottom, 0px);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }

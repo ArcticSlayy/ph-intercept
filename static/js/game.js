@@ -3,9 +3,11 @@
   const canvas = document.getElementById('pihole-canvas');
   const ctx = canvas.getContext('2d');
   const phLinkEl = document.getElementById('pihole-link');
+  const settingsBtnEl = document.getElementById('settings-btn');
   let W = 0, H = 0;
 
-  let active = false, evtSource = null, _phLinkFaded = false;
+  let safeBottom = 0, hudSH = 108;
+  let active = false, evtSource = null, sseRetryDelay = 3000;
   let lastT = 0, lastSpawn = 0, shipX = 0, shipY = 0, lastGun = 0;
   let lastEnemyAt = 0;
   let activeEnemies = 0, idleBlend = 0;
@@ -18,7 +20,7 @@
   const drone2Missiles = [];
   let hudGravity = null;
   let hudStats = { blocked: null, queries: null, percent: null };
-  let hudStatsPollTimer = null;
+  let hudStatsPollTimer = null, _onVisible = null;
   let gravityState = 'idle'; // 'idle' | 'updating' | 'done'
   let gravityDoneAt = 0;
   let gravityPollTimer = null;
@@ -51,7 +53,27 @@
   let shieldHitbox = { x: 0, y: 0, w: 0, h: 0 };
   let shieldMenuItems = [];
   let shieldHovered = false;
+  let settingsMenuOpen = false;
+  let settingsMenuItems = [];
   let mouseX = -1, mouseY = -1;
+
+  // Display toggles (persisted to localStorage)
+  let showFriendlies = true;
+  let showDomain     = true;
+  let showClient     = false;
+  (function _loadDisplaySettings() {
+    try {
+      const s = JSON.parse(localStorage.getItem('ph_display'));
+      if (s) {
+        if (s.friendlies != null) showFriendlies = !!s.friendlies;
+        if (s.domain     != null) showDomain     = !!s.domain;
+        if (s.client     != null) showClient      = !!s.client;
+      }
+    } catch {}
+  })();
+  function _saveDisplaySettings() {
+    try { localStorage.setItem('ph_display', JSON.stringify({ friendlies: showFriendlies, domain: showDomain, client: showClient })); } catch {}
+  }
   let currentShip = 'protector';  // 'protector' | 'falcon' | 'swordfish' | 'enterprise'
   let warpState = 'none';         // 'none' | 'out' | 'in'
   let warpAt = 0;
@@ -63,6 +85,18 @@
   let shipMenuItems = [];
   let shipMenuHitbox = { x: 0, y: 0, w: 0, h: 0 };
   let shipMenuHovered = false;
+  let shipBodyHitbox = { x: 0, y: 0, w: 0, h: 0 };
+  let shipQuote = null;    // { text: string, shownAt: number } | null
+  let shipQuoteCooldown = 0; // performance.now() timestamp — no new quotes until after this
+  let shipQuoteDeck = [];       // shuffled queue for the current ship
+  let shipQuoteDeckFor = null;  // which ship the deck was built for
+  let shipQuoteLastShown = null;
+  const SHIP_QUOTES = {
+    protector:  ["Never give up, never surrender!", "By Grabthar's hammer, by the suns of Warvan, you shall be avenged.", "EXPLAIN.", "I'm just the guy who dies in episode 3!", "Can you form some sort of rudimentary lathe?", "Are you enjoying your Kep-mok blood ticks, Dr. Lazarus?", "It's all real."],
+    falcon:     ["Never tell me the odds!", "I'd just as soon kiss a Wookiee.", "BUT SIR!!", "I am a Jedi, like my father before me.", "I can fly anything.", "It's not my fault!", "Shut him up or shut him down!"],
+    swordfish:  ["Whatever happens, happens.", "I'm not going there to die. I'm going to find out if I'm really alive.", "I'm not a bounty hunter for the money.", "I love a man who can cook.", "Ed and Ein are hungry!"],
+    enterprise: ["Live long and prosper.", "The needs of the many outweigh the needs of the few, or the one.", "He's dead, Jim.", "Risk is our business.", "Fascinating."],
+  };
   const DISABLE_OPTIONS = [
     { label: '10 SEC', timer: 10,  ms: 10000 },
     { label: '30 SEC', timer: 30,  ms: 30000 },
@@ -169,15 +203,15 @@
 
   // ── Entity management ─────────────────────────────────────────────
   function spawnEntity(ev) {
+    if (ev.status === 'allowed' && !showFriendlies) return;
     const blocked = ev.status === 'blocked';
     const isCache = ev.source === 'cache';
     const existing = entities.find(e => e.domain === ev.domain && e.type === ev.status && e.state !== 'shot');
     if (existing) {
-      if (blocked) {
-        const prevTier = Math.min(existing.count, 3);
-        existing.count++;
-        const newTier = Math.min(existing.count, 3);
-        if (newTier > prevTier) {
+      const prevTier = Math.min(existing.count, 3);
+      existing.count++;
+      const newTier = Math.min(existing.count, 3);
+      if (blocked && newTier > prevTier) {
           const tierColor = newTier >= 3 ? '190,60,255' : '255,130,30';
           existing.mutateAt = performance.now();
           existing.mutateColor = tierColor;
@@ -190,7 +224,6 @@
           }
           explosions.push({ ps, born: performance.now(), dur: 600 });
         }
-      }
       return;
     }
     if (entities.length >= 50) return;
@@ -267,7 +300,7 @@
         const offsets = [-52, 38, -24, 58, -10];
         for (let bi = 0; bi < offsets.length; bi++) {
           const off = offsets[bi] + (Math.random() - 0.5) * 18;
-          lasers.push({ style: 'seeker', tier,
+          lasers.push({ style: 'seeker', tier, target: ent,
                         x0: sx0, y0: sy0, x1: tx, y1: ty,
                         cpx: midX + px * off, cpy: midY + py * off,
                         born: now + bi * 30, dur: 210 });
@@ -304,6 +337,9 @@
     warpState = 'out';
     warpAt = performance.now();
     shipMenuOpen = false;
+    settingsMenuOpen = false;
+    if (settingsBtnEl) settingsBtnEl.classList.remove('menu-open');
+    shipQuote = null; shipQuoteCooldown = 0; shipQuoteDeck = []; shipQuoteDeckFor = null; shipQuoteLastShown = null;
     lasers.length = 0;
     shakeAt = warpAt; shakeDur = 500; shakeAmp = 16;
     for (const e of entities) e.warpPushed = false;
@@ -331,8 +367,8 @@
       if (e.type === 'blocked') {
         e.x += Math.sin(e.wobble + age * 0.002) * 0.012 * dt;
         if (shipPowerState === 'up' && warpState === 'none') {
-          if (e.state === 'alive' && age > 2200) { e.state = 'targeted'; e.targetedAt = t; }
-          if (e.state === 'targeted' && age > 3400) fireAt(e);
+          if (e.state === 'alive' && age > 2200 && t - e.appearAt > 600) { e.state = 'targeted'; e.targetedAt = t; }
+          if (e.state === 'targeted' && age > 3400 && t - e.appearAt > 600) fireAt(e);
         } else if (e.state === 'targeted') {
           e.state = 'alive'; // drop targeting lock when shields are down
         }
@@ -349,7 +385,10 @@
             ? `rgba(255,130,30,0.9)`
             : `rgba(255,50,50,0.9)`;
           createExplosionFromBmp(bmp, e.x, e.y, e.killedBy, color);
-          createDomainFragments(e.domain, e.x, e.y + bmpH(bmp) * PX / 2 + 10, tier);
+          if (showDomain) {
+            const _fBase = e.y + bmpH(bmp) * PX / 2 + 13;
+            createDomainFragments(e.domain, e.x, (showClient && e.client) ? _fBase + 14 : _fBase, tier);
+          }
           entities.splice(i, 1);
           continue;
         }
@@ -454,7 +493,7 @@
       drone.x += (droneHoverX - drone.x) * Math.min(1, 0.003 * dt);
       drone.y += ((droneHoverY + droneBob) - drone.y) * Math.min(1, 0.003 * dt);
       if (shipPowerState === 'up' && t - drone.lastFire > DRONE_FIRE_INTERVAL) {
-        const droneTargets = entities.filter(e => e.type === 'blocked' && e.state !== 'shot' && e.state !== 'targeted' && e.state !== 'seeker-incoming' && !droneMissiles.some(m => m.target === e) && !drone2Missiles.some(m => m.target === e) && e.x >= 0 && e.x <= W && e.y >= 0 && e.y <= H);
+        const droneTargets = entities.filter(e => e.type === 'blocked' && Math.min(e.count, 3) < 3 && e.state !== 'shot' && e.state !== 'targeted' && e.state !== 'seeker-incoming' && !droneMissiles.some(m => m.target === e) && !drone2Missiles.some(m => m.target === e) && e.x >= 120 && e.x <= W - 120 && e.y >= 100 && e.y <= H - hudSH - safeBottom - 30);
         const shipHasTarget = entities.some(e => e.state === 'targeted');
         if (droneTargets.length && (droneTargets.length > 1 || shipHasTarget)) {
           const tgt = droneTargets[Math.floor(Math.random() * droneTargets.length)];
@@ -473,10 +512,9 @@
       }
     }
     if (drone.state === 'docking') {
-      const dockX = shipX + drone.side * 28;
-      drone.x += (dockX - drone.x) * Math.min(1, 0.012 * dt);
+      drone.x += (shipX - drone.x) * Math.min(1, 0.012 * dt);
       drone.y += (shipY - drone.y) * Math.min(1, 0.012 * dt);
-      if (Math.hypot(drone.x - dockX, drone.y - shipY) < 3) drone.state = 'docked';
+      if (Math.hypot(drone.x - shipX, drone.y - shipY) < 3) drone.state = 'docked';
     }
     // Keep drone clear of main ship's weapon fire path (weapons fire ~±20px from shipX)
     if (drone.state === 'launching' || drone.state === 'active') {
@@ -521,9 +559,9 @@
       drone2.x += (drone2HoverX - drone2.x) * Math.min(1, 0.003 * dt);
       drone2.y += ((drone2HoverY + drone2Bob) - drone2.y) * Math.min(1, 0.003 * dt);
       if (shipPowerState === 'up' && t - drone2.lastFire > DRONE2_FIRE_INTERVAL) {
-        const drone2Targets = entities.filter(e => e.type === 'blocked' && e.state !== 'shot' && e.state !== 'targeted' && e.state !== 'seeker-incoming'
+        const drone2Targets = entities.filter(e => e.type === 'blocked' && Math.min(e.count, 3) < 3 && e.state !== 'shot' && e.state !== 'targeted' && e.state !== 'seeker-incoming'
           && !droneMissiles.some(m => m.target === e) && !drone2Missiles.some(m => m.target === e)
-          && e.x >= 0 && e.x <= W && e.y >= 0 && e.y <= H);
+          && e.x >= 120 && e.x <= W - 120 && e.y >= 100 && e.y <= H - hudSH - safeBottom - 30);
         const ship2HasTarget = entities.some(e => e.state === 'targeted');
         if (drone2Targets.length && (drone2Targets.length > 1 || ship2HasTarget)) {
           const tgt = drone2Targets[Math.floor(Math.random() * drone2Targets.length)];
@@ -541,10 +579,9 @@
       }
     }
     if (drone2.state === 'docking') {
-      const dockX2 = shipX + drone2.side * 28;
-      drone2.x += (dockX2 - drone2.x) * Math.min(1, 0.012 * dt);
+      drone2.x += (shipX - drone2.x) * Math.min(1, 0.012 * dt);
       drone2.y += (shipY - drone2.y) * Math.min(1, 0.012 * dt);
-      if (Math.hypot(drone2.x - dockX2, drone2.y - shipY) < 3) drone2.state = 'docked';
+      if (Math.hypot(drone2.x - shipX, drone2.y - shipY) < 3) drone2.state = 'docked';
     }
     if (drone2.state === 'launching' || drone2.state === 'active') {
       if (drone2.side < 0) drone2.x = Math.min(drone2.x, shipX - 80);
@@ -559,7 +596,10 @@
         continue;
       }
       m.x += m.vx * dt; m.y += m.vy * dt;
-      if (Math.hypot(m.x - m.tx, m.y - m.ty) < 20 || t - m.born > m.dur + 150) {
+      const _tgt = m.target && m.target.state !== 'shot' && m.target.x >= 0 && m.target.x <= W && m.target.y >= 0 && m.target.y <= H ? m.target : null;
+      const _htx = _tgt ? _tgt.x : m.tx;
+      const _hty = _tgt ? _tgt.y : m.ty;
+      if (Math.hypot(m.x - _htx, m.y - _hty) < 20 || t - m.born > m.dur + 150) {
         m.exploded = true; m.explodeAt = t;
         if (m.target && m.target.state !== 'shot') {
           m.target.state = 'shot'; m.target.killedBy = 'drone';
@@ -587,7 +627,10 @@
         continue;
       }
       m.x += m.vx * dt; m.y += m.vy * dt;
-      if (Math.hypot(m.x - m.tx, m.y - m.ty) < 20 || t - m.born > m.dur + 150) {
+      const _tgt2 = m.target && m.target.state !== 'shot' && m.target.x >= 0 && m.target.x <= W && m.target.y >= 0 && m.target.y <= H ? m.target : null;
+      const _htx2 = _tgt2 ? _tgt2.x : m.tx;
+      const _hty2 = _tgt2 ? _tgt2.y : m.ty;
+      if (Math.hypot(m.x - _htx2, m.y - _hty2) < 20 || t - m.born > m.dur + 150) {
         m.exploded = true; m.explodeAt = t;
         if (m.target && m.target.state !== 'shot') {
           m.target.state = 'shot'; m.target.killedBy = 'drone';
@@ -713,18 +756,28 @@
       if (lp >= 1) { carrierState = 'none'; carrierY = 0; carrierRestY = 0; }
     }
 
-    render(t);
-
-    const _piFade = shipPowerState === 'powerdown' ||
-      (shipPowerState === 'startup' && (t - startupAt) / STARTUP_DUR <= 0.72);
-    if (_piFade !== _phLinkFaded) {
-      _phLinkFaded = _piFade;
-      if (phLinkEl) {
-        phLinkEl.style.opacity = _piFade ? '0' : '';
-        phLinkEl.style.pointerEvents = _piFade ? 'none' : '';
+    if (settingsBtnEl) {
+      const _startupPhase = shipPowerState === 'startup' ? (t - startupAt) / STARTUP_DUR : -1;
+      const _btnHide = shipPowerState === 'powerdown' || (_startupPhase >= 0 && _startupPhase <= 0.72);
+      settingsBtnEl.style.transition = _btnHide ? 'opacity 100ms ease' : '';
+      settingsBtnEl.style.opacity = _btnHide ? '0' : '';
+      settingsBtnEl.style.pointerEvents = _btnHide ? 'none' : '';
+      if (_btnHide) {
+        // Close the canvas menu but leave menu-open class so the button fades out as-is
+        // (removing it would trigger the X→burger span animation while fading, visible to the user)
+        if (settingsMenuOpen) settingsMenuOpen = false;
+      } else if (!settingsMenuOpen) {
+        // Snap the button state clean while opacity is still 0 — the class removal is invisible
+        settingsBtnEl.classList.remove('menu-open');
       }
     }
+
+    render(t);
+
   }
+
+  const _phIcon = new Image();
+  _phIcon.src = '/static/icons/pihole.svg';
 
   const _SHIP_CONFIGS = {
     protector:  { bmp: PROTECTOR_BMP,     color: 'rgba(195,208,240,0.95)', glow: 'rgba(170,190,235,0.55)', dimColor: 'rgba(195,208,240,0.22)',
@@ -771,178 +824,6 @@
       const _wp = Math.min(1, (t - warpAt) / WARP_OUT_DUR);
       const _p2 = Math.max(0, (_wp - 0.40) / 0.60);
       if (_p2 > 0) warpFrontY = shipY - _p2 * (H + 300);
-    }
-
-    // Entities
-    for (const e of entities) {
-      const age = t - e.spawnTime;
-      const alpha = Math.min(1, (t - e.appearAt) / 400);
-
-      // Warp-blast push: visual distortion peaks as ship passes each entity, then fades naturally
-      let ex = e.x, ey = e.y;
-      if (warpFrontY !== null) {
-        const lateralDist = e.x - shipX;
-        const vertDist = e.y - warpFrontY; // positive = entity below ship (not yet passed)
-        const proximity = Math.exp(-Math.pow(vertDist / 75, 2));
-        const lateralFalloff = Math.exp(-Math.abs(lateralDist) / 160);
-        ex = e.x + Math.sign(lateralDist || 1) * proximity * lateralFalloff * 30;
-        ey = e.y - proximity * lateralFalloff * 10;
-      }
-
-      ctx.save();
-      ctx.globalAlpha = alpha;
-
-      const EPX = PX;
-      if (e.type === 'blocked') {
-        const tier = Math.min(e.count, 3);
-        const bmp  = tier >= 3 ? E3 : tier === 2 ? E2 : (e.design === 0 ? E0 : E1);
-        const pulse = 0.75 + 0.25 * Math.sin(age * 0.005);
-        const [col, glow, rcol, rglow] = tier >= 3
-          ? [`rgba(190,60,255,${pulse})`, 'rgba(190,60,255,0.35)', 'rgba(255,210,50,0.9)',  'rgba(255,175,30,0.6)']
-          : tier === 2
-          ? [`rgba(255,130,30,${pulse})`, 'rgba(255,130,30,0.35)', 'rgba(0,220,255,0.9)',   'rgba(0,190,255,0.6)']
-          : [`rgba(255,50,50,${pulse})`,  'rgba(255,60,40,0.35)',  'rgba(80,255,160,0.9)',  'rgba(60,240,140,0.6)'];
-        // Mutation scale pulse
-        const mp = e.mutateAt > 0 ? Math.min(1, (t - e.mutateAt) / 500) : 1;
-        const mutActive = mp < 1;
-        ctx.save();
-        ctx.translate(ex, ey);
-        if (mutActive) {
-          const sc = 1 + 0.45 * Math.sin(mp * Math.PI);
-          ctx.scale(sc, sc);
-        }
-
-        drawBmp(ctx, bmp, 0, 0, col, glow, EPX);
-
-        // Targeting reticle
-        if (e.state === 'targeted') {
-          const rAge = t - e.targetedAt;
-          const rPulse = 0.5 + 0.5 * Math.sin(rAge * 0.015);
-          const r = 22 + Math.max(0, 1 - rAge / 500) * 10;
-          ctx.globalAlpha = alpha * (0.5 + 0.4 * rPulse);
-          ctx.strokeStyle = rcol;
-          ctx.lineWidth = 1;
-          ctx.shadowColor = rglow;
-          ctx.shadowBlur = 6;
-          ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
-          const arm = 6;
-          ctx.beginPath();
-          ctx.moveTo(-r, 0); ctx.lineTo(-r + arm, 0);
-          ctx.moveTo(r - arm, 0); ctx.lineTo(r, 0);
-          ctx.moveTo(0, -r); ctx.lineTo(0, -r + arm);
-          ctx.moveTo(0, r - arm); ctx.lineTo(0, r);
-          ctx.stroke();
-          ctx.shadowBlur = 0;
-          ctx.globalAlpha = alpha;
-        }
-
-        ctx.restore();
-
-        // Expanding ring (world space - unaffected by scale)
-        if (mutActive) {
-          const rr = Math.round(12 + 36 * mp);
-          ctx.save();
-          ctx.globalAlpha = alpha * (1 - mp);
-          ctx.strokeStyle = `rgba(${e.mutateColor},1)`;
-          ctx.lineWidth = 2;
-          ctx.shadowColor = `rgba(${e.mutateColor},0.6)`;
-          ctx.shadowBlur = 8;
-          ctx.beginPath(); ctx.arc(ex, ey, rr, 0, Math.PI * 2); ctx.stroke();
-          ctx.shadowBlur = 0;
-          ctx.restore();
-        }
-      } else {
-        const tier = Math.min(e.count, 3);
-        const bmp = tier >= 3 ? F4 : tier === 2 ? F3 : [F0, F1, F2][e.design % 3];
-        const [color, glow] = tier >= 3
-          ? ['rgba(255,220,100,0.9)', 'rgba(255,220,100,0.3)']
-          : tier === 2
-          ? ['rgba(100,220,255,0.9)', 'rgba(100,220,255,0.3)']
-          : [['rgba(50,215,120,0.9)','rgba(80,175,255,0.9)','rgba(175,220,70,0.9)'][e.design % 3],
-              ['rgba(50,215,120,0.3)','rgba(80,175,255,0.3)','rgba(175,220,70,0.3)'][e.design % 3]];
-        ctx.save();
-        ctx.translate(ex, ey);
-        ctx.rotate(Math.atan2(e.vy, e.vx) + Math.PI / 2);
-        drawBmp(ctx, bmp, 0, 0, color, glow, EPX - 1);
-        ctx.restore();
-      }
-
-      ctx.restore();
-
-      // Domain label (always upright)
-      const la = e.type === 'blocked' ? alpha : e.labelAlpha * alpha;
-      if (la > 0.02) {
-        const tier = Math.min(e.count, 3);
-        const lbmp = e.type === 'blocked'
-          ? (tier >= 3 ? E3 : tier === 2 ? E2 : (e.design === 0 ? E0 : E1))
-          : (tier >= 3 ? F4 : tier === 2 ? F3 : [F0, F1, F2][e.design % 3]);
-        const ly = ey + (bmpH(lbmp) * EPX / 2) + 10;
-        ctx.save();
-        ctx.globalAlpha = la * 0.85;
-        ctx.font = '11px "IBM Plex Mono", monospace';
-        ctx.textAlign = 'center';
-        if (e.type === 'blocked') {
-          const tier = Math.min(e.count, 3);
-          ctx.fillStyle = tier >= 3 ? 'rgba(200,100,255,1)' : tier === 2 ? 'rgba(255,160,60,1)' : 'rgba(255,120,100,1)';
-        } else {
-          ctx.fillStyle = 'rgba(150,230,175,1)';
-        }
-        ctx.shadowColor = 'rgba(0,0,0,0.95)';
-        ctx.shadowBlur = 4;
-        const dom = e.domain.length > 32 ? '…' + e.domain.slice(-30) : e.domain;
-        ctx.fillText(dom, ex, ly);
-        ctx.restore();
-      }
-    }
-
-    // Explosions
-    for (const ex of explosions) {
-      const pa = Math.max(0, 1 - (t - ex.born) / ex.dur * 1.4);
-      if (pa <= 0) continue;
-      const paStr = pa.toFixed(2);
-      let lastCol = null;
-      for (const p of ex.ps) {
-        if (p.col !== lastCol) {
-          ctx.fillStyle = `rgba(${p.col},${paStr})`;
-          lastCol = p.col;
-        }
-        const half = Math.max(1, Math.round(p.r));
-        ctx.fillRect(Math.round(p.x) - half, Math.round(p.y) - half, half * 2, half * 2);
-      }
-    }
-
-    // Chain shockwave rings - expanding concussive ring at chain detonation point
-    for (const r of chainRings) {
-      const prog = (t - r.born) / r.dur;
-      const radius = prog * (r.maxR || 52);
-      const a = Math.max(0, (1 - prog) * 0.75);
-      ctx.save();
-      ctx.globalAlpha = a;
-      ctx.strokeStyle = r.col1 || 'rgba(255,210,80,1)';
-      ctx.lineWidth = 1.5;
-      ctx.shadowColor = r.colS || 'rgba(255,180,40,0.9)';
-      ctx.shadowBlur = 12;
-      ctx.beginPath();
-      ctx.arc(Math.round(r.x), Math.round(r.y), radius, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    // Domain fragments - letters scatter from killed enemies
-    for (const f of domainFragments) {
-      const prog = (t - f.born) / f.dur;
-      if (prog >= 1) continue;
-      const a = Math.max(0, 1 - prog * 1.3);
-      ctx.save();
-      ctx.globalAlpha = a;
-      ctx.font = '11px "IBM Plex Mono", monospace';
-      ctx.fillStyle = `rgba(${f.col},1)`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.translate(Math.round(f.x), Math.round(f.y));
-      ctx.rotate(f.rot);
-      ctx.fillText(f.ch, 0, 0);
-      ctx.restore();
     }
 
     // ── Carrier ship ──────────────────────────────────────────────────────
@@ -1228,6 +1109,194 @@
       ctx.restore();
     }
 
+    // Entities (drawn after carrier so they appear over it during powerdown)
+    ctx.font = '11px "IBM Plex Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.imageSmoothingEnabled = false;
+    for (const e of entities) {
+      const age = t - e.spawnTime;
+      const alpha = Math.min(1, (t - e.appearAt) / 400);
+
+      // Warp-blast push: visual distortion peaks as ship passes each entity, then fades naturally
+      let ex = e.x, ey = e.y;
+      if (warpFrontY !== null) {
+        const lateralDist = e.x - shipX;
+        const vertDist = e.y - warpFrontY; // positive = entity below ship (not yet passed)
+        const proximity = Math.exp(-Math.pow(vertDist / 75, 2));
+        const lateralFalloff = Math.exp(-Math.abs(lateralDist) / 160);
+        ex = e.x + Math.sign(lateralDist || 1) * proximity * lateralFalloff * 30;
+        ey = e.y - proximity * lateralFalloff * 10;
+      }
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+
+      const EPX = PX;
+      if (e.type === 'blocked') {
+        const tier = Math.min(e.count, 3);
+        const bmp  = tier >= 3 ? E3 : tier === 2 ? E2 : (e.design === 0 ? E0 : E1);
+        const pulse = 0.75 + 0.25 * Math.sin(age * 0.005);
+        const [colFull, glow, rcol, rglow] = tier >= 3
+          ? ['rgba(190,60,255,1)', 'rgba(190,60,255,0.35)', 'rgba(255,210,50,0.9)',  'rgba(255,175,30,0.6)']
+          : tier === 2
+          ? ['rgba(255,130,30,1)', 'rgba(255,130,30,0.35)', 'rgba(0,220,255,0.9)',   'rgba(0,190,255,0.6)']
+          : ['rgba(255,50,50,1)',  'rgba(255,60,40,0.35)',  'rgba(80,255,160,0.9)',  'rgba(60,240,140,0.6)'];
+        // Mutation scale pulse
+        const mp = e.mutateAt > 0 ? Math.min(1, (t - e.mutateAt) / 500) : 1;
+        const mutActive = mp < 1;
+        ctx.save();
+        ctx.translate(ex, ey);
+        if (mutActive) {
+          const sc = 1 + 0.45 * Math.sin(mp * Math.PI);
+          ctx.scale(sc, sc);
+        }
+
+        const _sp = getCachedSprite(bmp, colFull, glow, EPX);
+        ctx.globalAlpha = alpha * pulse;
+        ctx.drawImage(_sp.canvas, -_sp.w / 2, -_sp.h / 2);
+        ctx.globalAlpha = alpha;
+
+        // Targeting reticle
+        if (e.state === 'targeted') {
+          const rAge = t - e.targetedAt;
+          const rPulse = 0.5 + 0.5 * Math.sin(rAge * 0.015);
+          const r = 22 + Math.max(0, 1 - rAge / 500) * 10;
+          ctx.globalAlpha = alpha * (0.5 + 0.4 * rPulse);
+          ctx.strokeStyle = rcol;
+          ctx.lineWidth = 1;
+          ctx.shadowColor = rglow;
+          ctx.shadowBlur = 6;
+          ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
+          const arm = 6;
+          ctx.beginPath();
+          ctx.moveTo(-r, 0); ctx.lineTo(-r + arm, 0);
+          ctx.moveTo(r - arm, 0); ctx.lineTo(r, 0);
+          ctx.moveTo(0, -r); ctx.lineTo(0, -r + arm);
+          ctx.moveTo(0, r - arm); ctx.lineTo(0, r);
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+          ctx.globalAlpha = alpha;
+        }
+
+        ctx.restore();
+
+        // Expanding ring (world space - unaffected by scale)
+        if (mutActive) {
+          const rr = Math.round(12 + 36 * mp);
+          ctx.save();
+          ctx.globalAlpha = alpha * (1 - mp);
+          ctx.strokeStyle = `rgba(${e.mutateColor},1)`;
+          ctx.lineWidth = 2;
+          ctx.shadowColor = `rgba(${e.mutateColor},0.6)`;
+          ctx.shadowBlur = 8;
+          ctx.beginPath(); ctx.arc(ex, ey, rr, 0, Math.PI * 2); ctx.stroke();
+          ctx.shadowBlur = 0;
+          ctx.restore();
+        }
+      } else {
+        const tier = Math.min(e.count, 3);
+        const bmp = tier >= 3 ? F4 : tier === 2 ? F3 : [F0, F1, F2][e.design % 3];
+        const [color, glow] = tier >= 3
+          ? ['rgba(205,170,75,0.72)', 'rgba(205,170,75,0.2)']
+          : tier === 2
+          ? ['rgba(100,220,255,0.72)', 'rgba(100,220,255,0.2)']
+          : [['rgba(50,215,120,0.72)','rgba(80,175,255,0.72)','rgba(175,220,70,0.72)'][e.design % 3],
+              ['rgba(50,215,120,0.2)','rgba(80,175,255,0.2)','rgba(175,220,70,0.2)'][e.design % 3]];
+        ctx.save();
+        ctx.translate(ex, ey);
+        ctx.rotate(Math.atan2(e.vy, e.vx) + Math.PI / 2);
+        const _sp = getCachedSprite(bmp, color, glow, EPX - 1);
+        ctx.drawImage(_sp.canvas, -_sp.w / 2, -_sp.h / 2);
+        ctx.restore();
+      }
+
+      ctx.restore();
+
+      // Domain / client labels (always upright)
+      const la = e.type === 'blocked' ? alpha : e.labelAlpha * alpha;
+      if (la > 0.02 && (showDomain || showClient)) {
+        const tier = Math.min(e.count, 3);
+        const lbmp = e.type === 'blocked'
+          ? (tier >= 3 ? E3 : tier === 2 ? E2 : (e.design === 0 ? E0 : E1))
+          : (tier >= 3 ? F4 : tier === 2 ? F3 : [F0, F1, F2][e.design % 3]);
+        const baseY = ey + (bmpH(lbmp) * EPX / 2) + 13;
+        const both = showDomain && showClient;
+        ctx.save();
+        ctx.globalAlpha = la * 0.85;
+        ctx.shadowColor = 'rgba(0,0,0,0.95)';
+        ctx.shadowBlur = 4;
+        if (showClient && e.client) {
+          ctx.fillStyle = 'rgba(130,185,225,0.80)';
+          const cli = e.client.length > 32 ? '…' + e.client.slice(-30) : e.client;
+          ctx.fillText(cli, ex, baseY);
+        }
+        if (showDomain) {
+          const domY = both && showClient && e.client ? baseY + 14 : baseY;
+          if (e.type === 'blocked') {
+            ctx.fillStyle = tier >= 3 ? 'rgba(200,100,255,1)' : tier === 2 ? 'rgba(255,160,60,1)' : 'rgba(255,120,100,1)';
+          } else {
+            ctx.fillStyle = 'rgba(150,230,175,1)';
+          }
+          const dom = e.domain.length > 32 ? '…' + e.domain.slice(-30) : e.domain;
+          ctx.fillText(dom, ex, domY);
+        }
+        ctx.restore();
+      }
+    }
+
+    // Explosions
+    for (const ex of explosions) {
+      const pa = Math.max(0, 1 - (t - ex.born) / ex.dur * 1.4);
+      if (pa <= 0) continue;
+      const paStr = pa.toFixed(2);
+      let lastCol = null;
+      for (const p of ex.ps) {
+        if (p.col !== lastCol) {
+          ctx.fillStyle = `rgba(${p.col},${paStr})`;
+          lastCol = p.col;
+        }
+        const half = Math.max(1, Math.round(p.r));
+        ctx.fillRect(Math.round(p.x) - half, Math.round(p.y) - half, half * 2, half * 2);
+      }
+    }
+
+    // Chain shockwave rings - expanding concussive ring at chain detonation point
+    for (const r of chainRings) {
+      const prog = (t - r.born) / r.dur;
+      const radius = prog * (r.maxR || 52);
+      const a = Math.max(0, (1 - prog) * 0.75);
+      ctx.save();
+      ctx.globalAlpha = a;
+      ctx.strokeStyle = r.col1 || 'rgba(255,210,80,1)';
+      ctx.lineWidth = 1.5;
+      ctx.shadowColor = r.colS || 'rgba(255,180,40,0.9)';
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.arc(Math.round(r.x), Math.round(r.y), radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Domain fragments - letters scatter from killed enemies (only when domain labels are on)
+    if (showDomain && domainFragments.length > 0) {
+      ctx.font = '11px "IBM Plex Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (const f of domainFragments) {
+        const prog = (t - f.born) / f.dur;
+        if (prog >= 1) continue;
+        const a = Math.max(0, 1 - prog * 1.3);
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.fillStyle = `rgba(${f.col},1)`;
+        ctx.translate(Math.round(f.x), Math.round(f.y));
+        ctx.rotate(f.rot);
+        ctx.fillText(f.ch, 0, 0);
+        ctx.restore();
+      }
+      ctx.textBaseline = 'alphabetic';
+    }
+
     // Ship and drone positions
     const passiveBob = shipPowerState === 'up' ? 2.5 * Math.sin(t * 0.00055) + 1 * Math.sin(t * 0.00093) : 0;
     const cx = Math.round(shipX);
@@ -1245,36 +1314,57 @@
         const odx = gtp.nx - l.x0, ody = gtp.ny - l.y0;
         const ox = l.x0 + odx, oy = l.y0 + ody;
         const cpx = l.cpx + odx, cpy = l.cpy + ody;
-        const bx = inv*inv*ox + 2*inv*prog*cpx + prog*prog*l.x1;
-        const by = inv*inv*oy + 2*inv*prog*cpy + prog*prog*l.y1;
+        const ex1 = l.target && l.target.state === 'seeker-incoming' ? l.target.x : l.x1;
+        const ey1 = l.target && l.target.state === 'seeker-incoming' ? l.target.y : l.y1;
+        const bx = inv*inv*ox + 2*inv*prog*cpx + prog*prog*ex1;
+        const by = inv*inv*oy + 2*inv*prog*cpy + prog*prog*ey1;
         const tp = Math.max(0, prog - 0.28);
         const tinv = 1 - tp;
-        const trx = tinv*tinv*ox + 2*tinv*tp*cpx + tp*tp*l.x1;
-        const trY = tinv*tinv*oy + 2*tinv*tp*cpy + tp*tp*l.y1;
-        const alpha = Math.sin(prog * Math.PI) * 0.95;
+        const trx = tinv*tinv*ox + 2*tinv*tp*cpx + tp*tp*ex1;
+        const trY = tinv*tinv*oy + 2*tinv*tp*cpy + tp*tp*ey1;
+        const inFlight = age <= l.dur;
+        // fade in quickly at source, hold full brightness - no fade at target end
+        const alpha = Math.min(1, age / (l.dur * 0.12));
+        // impact phase: how far through the 55ms post-arrival window (1→0)
+        const impactF = inFlight ? 0 : Math.max(0, 1 - (age - l.dur) / 55);
+        // head grows in last 20% of flight, peaks on arrival
+        const approachF = inFlight ? Math.max(0, (prog - 0.80) / 0.20) : 1;
+        const headR = 5 + approachF * 7;
         ctx.save();
         ctx.globalAlpha = alpha;
-        // outer glow trail
-        ctx.strokeStyle = 'rgba(255,180,20,0.45)';
-        ctx.lineWidth = 5;
-        ctx.shadowColor = 'rgba(255,160,0,0.6)';
-        ctx.shadowBlur = 18;
-        ctx.beginPath(); ctx.moveTo(trx, trY); ctx.lineTo(bx, by); ctx.stroke();
-        // bright core trail
-        ctx.strokeStyle = '#ffee66';
-        ctx.lineWidth = 2;
-        ctx.shadowColor = 'rgba(255,220,60,0.9)';
-        ctx.shadowBlur = 10;
-        ctx.beginPath(); ctx.moveTo(trx, trY); ctx.lineTo(bx, by); ctx.stroke();
-        // head - outer glow
-        ctx.fillStyle = 'rgba(255,200,60,0.7)';
-        ctx.shadowBlur = 22;
+        if (inFlight) {
+          // outer glow trail
+          ctx.strokeStyle = 'rgba(255,180,20,0.45)';
+          ctx.lineWidth = 5;
+          ctx.shadowColor = 'rgba(255,160,0,0.6)';
+          ctx.shadowBlur = 18;
+          ctx.beginPath(); ctx.moveTo(trx, trY); ctx.lineTo(bx, by); ctx.stroke();
+          // bright core trail
+          ctx.strokeStyle = '#ffee66';
+          ctx.lineWidth = 2;
+          ctx.shadowColor = 'rgba(255,220,60,0.9)';
+          ctx.shadowBlur = 10;
+          ctx.beginPath(); ctx.moveTo(trx, trY); ctx.lineTo(bx, by); ctx.stroke();
+        }
+        // head / impact burst - full alpha in flight, impactF fade after arrival
+        ctx.globalAlpha = inFlight ? alpha : impactF;
+        ctx.fillStyle = 'rgba(255,200,60,0.85)';
         ctx.shadowColor = 'rgba(255,180,0,0.9)';
-        ctx.beginPath(); ctx.arc(bx, by, 5, 0, Math.PI * 2); ctx.fill();
-        // head - bright white core
+        ctx.shadowBlur = 22 + approachF * 24;
+        ctx.beginPath(); ctx.arc(bx, by, headR, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = 'rgba(255,255,220,1)';
-        ctx.shadowBlur = 6;
-        ctx.beginPath(); ctx.arc(bx, by, 2.5, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 8;
+        ctx.beginPath(); ctx.arc(bx, by, inFlight ? 2.5 : 4, 0, Math.PI * 2); ctx.fill();
+        // expanding ring on arrival
+        if (!inFlight) {
+          const ringR = 6 + (1 - impactF) * 26;
+          ctx.strokeStyle = 'rgba(255,230,100,0.9)';
+          ctx.lineWidth = 1.5;
+          ctx.shadowColor = 'rgba(255,200,40,0.8)';
+          ctx.shadowBlur = 12;
+          ctx.globalAlpha = impactF * 0.85;
+          ctx.beginPath(); ctx.arc(bx, by, ringR, 0, Math.PI * 2); ctx.stroke();
+        }
         ctx.restore();
       } else {
         const a = Math.max(0, 1 - (t - l.born) / 300);
@@ -1299,7 +1389,7 @@
     // Drone missiles (traveling) and sprite (rotated toward target)
     if (drone.state !== 'docked') {
       const dAlpha = drone.state === 'docking'
-        ? Math.min(1, Math.hypot(drone.x - shipX, drone.y - shipY) / 20)
+        ? Math.min(1, Math.hypot(drone.x - shipX, drone.y - shipY) / 45)
         : 1;
       const dx = Math.round(drone.x), dy = Math.round(drone.y);
 
@@ -1355,7 +1445,7 @@
     // Drone 2 missiles and sprite
     if (drone2.state !== 'docked') {
       const d2Alpha = drone2.state === 'docking'
-        ? Math.min(1, Math.hypot(drone2.x - shipX, drone2.y - shipY) / 20)
+        ? Math.min(1, Math.hypot(drone2.x - shipX, drone2.y - shipY) / 45)
         : 1;
       const d2x = Math.round(drone2.x), d2y = Math.round(drone2.y);
 
@@ -1410,6 +1500,8 @@
     const _SCFG = _SHIP_CONFIGS[currentShip];
     const _shipBmp = _SCFG.bmp;
     const flareBase = cy + bmpH(_shipBmp) * PX / 2 - 5;
+    const _shipHW = bmpW(_shipBmp) * PX / 2, _shipHH = bmpH(_shipBmp) * PX / 2;
+    shipBodyHitbox = warpState === 'none' ? { x: cx - _shipHW, y: cy - _shipHH, w: _shipHW * 2, h: _shipHH * 2 } : { x: 0, y: 0, w: 0, h: 0 };
     const ft = t * 0.005;
 
     // Descent streak (landing) and launch streak (departing)
@@ -1632,14 +1724,51 @@
       }
     }
 
+    // ── Ship easter-egg speech bubble ──────────────────────────
+    if (shipQuote) {
+      const _qAge = t - shipQuote.shownAt;
+      const _qTotal = 3500, _qFadeIn = 100, _qFadeStart = 3000;
+      if (_qAge > _qTotal) {
+        shipQuote = null;
+        shipQuoteCooldown = performance.now() + 800;
+      } else {
+        const _qA = _qAge < _qFadeIn ? _qAge / _qFadeIn : _qAge > _qFadeStart ? 1 - (_qAge - _qFadeStart) / (_qTotal - _qFadeStart) : 1;
+        ctx.save();
+        ctx.globalAlpha = _qA;
+        const _qFont = 9;
+        ctx.font = `${_qFont}px "Press Start 2P", monospace`;
+        const _qMaxW = Math.min(200, W - 40);
+        const _qWords = shipQuote.text.split(' ');
+        const _qLines = [];
+        let _qCur = '';
+        for (const _qW of _qWords) {
+          const _qTest = _qCur ? _qCur + ' ' + _qW : _qW;
+          if (ctx.measureText(_qTest).width > _qMaxW && _qCur) { _qLines.push(_qCur); _qCur = _qW; }
+          else _qCur = _qTest;
+        }
+        if (_qCur) _qLines.push(_qCur);
+        const _qLineH = _qFont + 9;
+        const _qBY = cy - _shipHH - 14;
+        ctx.fillStyle = 'rgba(215,225,248,0.95)';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.shadowColor = 'rgba(0,0,0,0.8)';
+        ctx.shadowBlur = 6;
+        for (let _qi = 0; _qi < _qLines.length; _qi++) {
+          ctx.fillText(_qLines[_qi], cx, _qBY - (_qLines.length - 1 - _qi) * _qLineH);
+        }
+        ctx.restore();
+      }
+    }
+
     // ── HUD Strip ────────────────────────────────────────────
     ctx.save();
     ctx.translate(shakeSx, shakeSy);
     ctx.globalAlpha = 0.62;
 
     // Responsive layout: panel widths scale with viewport, STATS gets the remainder
-    const SH = W < 480 ? 84 : W < 660 ? 94 : 108;
-    const SY = H - SH;
+    const SH = hudSH;
+    const SY = H - SH - safeBottom;
     const INT_W  = Math.min(240, Math.max(150, Math.round(W * 0.30)));
     const OPT_W  = W < 480 ? 0   : Math.min(140, Math.max(95,  Math.round(W * 0.16)));
     const TDB_W  = Math.min(250, Math.max(140, Math.round(W * 0.28)));
@@ -1700,6 +1829,8 @@
     const _fmtN = n => n == null ? '—' : n >= 1e6 ? (n/1e6).toFixed(2)+'M' : n >= 1e4 ? (n/1e3).toFixed(2)+'K' : String(n);
 
     // ── INTERCEPT ──────────────────────────────────────────
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, SY, INT_W, SH); ctx.clip();
     _modLabel('INTERCEPT', INT_W / 2, 'center');
     let shieldStr, shieldColor, shieldGlowColor = null;
     if (blockingEnabled === null) {
@@ -1749,6 +1880,7 @@
       const _hbH = _hasTimer ? Math.round(SH * 0.39) : Math.round(SH * 0.24);
       shieldHitbox = { x: INT_W / 2 - _hbW / 2, y: SY + Math.round(SH * 0.42), w: _hbW, h: _hbH };
     }
+    ctx.restore();
 
     // Disable menu - opens upward, bracket-outline style
     if (shieldMenuOpen) {
@@ -1783,24 +1915,124 @@
       shieldMenuItems = [];
     }
 
+    // ── Settings menu - opens upward from bottom-left, bracket-outline style ──
+    if (settingsMenuOpen) {
+      const _sitems = [
+        { key: 'friendlies', label: 'FRIENDLIES', state: showFriendlies, divAfter: true },
+        { key: 'client',     label: 'CLIENT',      state: showClient },
+        { key: 'domain',     label: 'DOMAIN',     state: showDomain },
+      ];
+      const smw = 186, smItemH = 28, smPad = 10, smDivH = 10, smPhRowH = 34;
+      const smh = smPad + smItemH + smDivH + smItemH * 2 + smDivH + smPhRowH + smPad;
+      const smX = 6, smY = SY - smh - 6;
+      ctx.fillStyle = 'rgba(8,11,16,0.92)';
+      ctx.fillRect(smX, smY, smw, smh);
+      const _smGlow = ctx.createLinearGradient(0, smY, 0, smY + 24);
+      _smGlow.addColorStop(0, 'rgba(140,160,175,0.07)'); _smGlow.addColorStop(1, 'rgba(140,160,175,0)');
+      ctx.fillStyle = _smGlow; ctx.fillRect(smX, smY + 1, smw, 24);
+      const _sma = 14;
+      ctx.strokeStyle = 'rgba(140,160,175,0.42)'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(smX + _sma, smY);         ctx.lineTo(smX, smY);         ctx.lineTo(smX, smY + _sma);
+      ctx.moveTo(smX + smw - _sma, smY);   ctx.lineTo(smX + smw, smY);   ctx.lineTo(smX + smw, smY + _sma);
+      ctx.moveTo(smX, smY + smh - _sma);   ctx.lineTo(smX, smY + smh);   ctx.lineTo(smX + _sma, smY + smh);
+      ctx.moveTo(smX + smw, smY + smh - _sma); ctx.lineTo(smX + smw, smY + smh); ctx.lineTo(smX + smw - _sma, smY + smh);
+      ctx.stroke();
+      let siy = smY + smPad;
+      settingsMenuItems = [];
+      ctx.font = `${_fSub}px "Press Start 2P", monospace`;
+      for (const item of _sitems) {
+        const hb = { x: smX, y: siy, w: smw, h: smItemH };
+        // Row label (static — no row-level hover)
+        ctx.textAlign = 'left';
+        ctx.fillStyle = 'rgba(175,200,238,0.65)';
+        ctx.fillText(item.label, smX + 12, siy + 19);
+        // Toggle switch (track + sliding knob) — hover state on pill only
+        const pillW = 36, pillH = 14, pillX = smX + smw - 12 - pillW, pillY = siy + (smItemH - pillH) / 2;
+        const pillHov = mouseX >= pillX && mouseX <= pillX + pillW && mouseY >= pillY && mouseY <= pillY + pillH;
+        const knobSz = 10, knobPad = 2;
+        const knobX = item.state ? pillX + pillW - knobSz - knobPad : pillX + knobPad;
+        const knobY = pillY + (pillH - knobSz) / 2;
+        ctx.fillStyle = item.state ? 'rgba(50,215,120,0.22)' : 'rgba(30,32,40,0.55)';
+        ctx.fillRect(pillX, pillY, pillW, pillH);
+        ctx.strokeStyle = item.state
+          ? (pillHov ? 'rgba(80,240,150,0.95)' : 'rgba(50,215,120,0.60)')
+          : (pillHov ? 'rgba(130,135,150,0.85)' : 'rgba(85,88,100,0.50)');
+        ctx.lineWidth = 1; ctx.lineCap = 'butt';
+        ctx.strokeRect(pillX + 0.5, pillY + 0.5, pillW - 1, pillH - 1);
+        ctx.fillStyle = item.state
+          ? (pillHov ? 'rgba(80,240,150,1)'     : 'rgba(50,215,120,0.95)')
+          : (pillHov ? 'rgba(135,140,155,0.90)' : 'rgba(95,100,115,0.75)');
+        ctx.fillRect(knobX, knobY, knobSz, knobSz);
+        settingsMenuItems.push({ key: item.key, hitbox: hb });
+        siy += smItemH;
+        if (item.divAfter) {
+          ctx.strokeStyle = 'rgba(140,160,175,0.14)'; ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(smX + 10, siy + smDivH / 2); ctx.lineTo(smX + smw - 10, siy + smDivH / 2);
+          ctx.stroke();
+          siy += smDivH;
+        }
+      }
+      // Divider before pihole row
+      ctx.strokeStyle = 'rgba(140,160,175,0.14)'; ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(smX + 10, siy + smDivH / 2); ctx.lineTo(smX + smw - 10, siy + smDivH / 2);
+      ctx.stroke();
+      siy += smDivH;
+      // Pi-hole admin link row
+      {
+        const phHb = { x: smX, y: siy, w: smw, h: smPhRowH };
+        const phHov = mouseX >= phHb.x && mouseX <= phHb.x + phHb.w && mouseY >= phHb.y && mouseY <= phHb.y + phHb.h;
+        if (phHov) { ctx.fillStyle = 'rgba(140,160,175,0.08)'; ctx.fillRect(phHb.x, phHb.y, phHb.w, phHb.h); }
+        // Pi-hole icon
+        const iconH = smPhRowH - 8, iconW = Math.round(iconH * 90 / 130);
+        const iconX = smX + 12, iconY = siy + (smPhRowH - iconH) / 2;
+        if (_phIcon.complete && _phIcon.naturalWidth > 0) {
+          ctx.save();
+          ctx.globalAlpha = phHov ? 0.88 : 0.45;
+          ctx.drawImage(_phIcon, iconX, iconY, iconW, iconH);
+          ctx.restore();
+        }
+        // Label
+        ctx.textAlign = 'left';
+        ctx.font = `${_fSub}px "Press Start 2P", monospace`;
+        ctx.fillStyle = phHov ? 'rgba(215,225,248,0.95)' : 'rgba(175,200,238,0.55)';
+        ctx.fillText('PI-HOLE', iconX + iconW + 12, siy + smPhRowH / 2 + 6);
+        // External link arrow drawn with lines
+        const _ax = smX + smw - 14, _ay = siy + smPhRowH / 2;
+        ctx.strokeStyle = phHov ? 'rgba(215,225,248,0.70)' : 'rgba(140,160,175,0.32)';
+        ctx.lineWidth = 1.5; ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(_ax - 5, _ay + 4); ctx.lineTo(_ax + 4, _ay - 4);
+        ctx.moveTo(_ax - 1, _ay - 4); ctx.lineTo(_ax + 4, _ay - 4); ctx.lineTo(_ax + 4, _ay + 1);
+        ctx.stroke();
+        settingsMenuItems.push({ key: 'pihole-link', hitbox: phHb });
+      }
+    } else {
+      settingsMenuItems = [];
+    }
+
     // ── INTEL ──────────────────────────────────────────────
-    // Column count adapts to available width; text is clipped to the panel.
-    // 4-col threshold requires ≥60px per cell (≥240px) so "intercept" label fits.
+    // Column thresholds scale with _fSub so "intercept" (9 chars) always fits its cell.
+    // 2-col: need cell ≥ ~9 * _fSub * 0.75 + 8px padding  → 15 * _fSub per cell × 2
+    // 4-col: same logic × 4
     if (INTEL_W >= 50) {
+      const _i2Min = 15 * _fSub, _i4Min = 33 * _fSub;
       const hsBlocked = hudStats.blocked;
       const hsAllowed = hudStats.queries != null && hudStats.blocked != null ? hudStats.queries - hudStats.blocked : null;
       const hsTotal = hudStats.queries;
       const pct = hudStats.percent;
       const _pctColor = pct == null ? 'rgba(150,150,150,0.50)' : pct >= 60 ? 'rgba(50,215,120,0.85)' : pct >= 40 ? 'rgba(210,220,70,0.85)' : 'rgba(255,110,50,0.85)';
       const _pctVal = pct != null ? pct.toFixed(1)+'%' : '—';
-      const intelCols = INTEL_W >= 240
+      const intelCols = INTEL_W >= _i4Min
         ? [
             { val: _fmtN(hsTotal),   label: 'total',     color: 'rgba(100,155,220,0.80)' },
             { val: _fmtN(hsBlocked), label: 'blocked',   color: 'rgba(255,70,60,0.90)'   },
             { val: _fmtN(hsAllowed), label: 'allowed',   color: 'rgba(50,215,120,0.90)'  },
             { val: _pctVal,          label: 'intercept', color: _pctColor },
           ]
-        : INTEL_W >= 90
+        : INTEL_W >= _i2Min
         ? [
             { val: _fmtN(hsBlocked), label: 'blocked',   color: 'rgba(255,70,60,0.90)' },
             { val: _pctVal,          label: 'intercept', color: _pctColor },
@@ -1808,7 +2040,7 @@
         : [
             { val: _fmtN(hsBlocked), label: 'blocked', color: 'rgba(255,70,60,0.90)' },
           ];
-      if (INTEL_W >= 240) _modLabel('STATS', INTEL_X + INTEL_W / 2, 'center');
+      if (INTEL_W >= _i4Min) _modLabel('STATS', INTEL_X + INTEL_W / 2, 'center');
       ctx.save();
       ctx.beginPath(); ctx.rect(INTEL_X, SY, INTEL_W, SH); ctx.clip();
       const cellW = INTEL_W / intelCols.length;
@@ -1826,6 +2058,8 @@
     }
 
     // ── GRAVITY ────────────────────────────────────────────
+    ctx.save();
+    ctx.beginPath(); ctx.rect(TDB_X, SY, TDB_W, SH); ctx.clip();
     _modLabel('GRAVITY', TDB_X + TDB_W / 2, 'center');
     let sigsStr, sigsColor = 'rgba(100,160,210,0.65)';
     if (gravityState === 'updating') {
@@ -1864,11 +2098,14 @@
       drawBmp(ctx, ARROW_DOWN_BMP, _aX, _aY, arrowCol, arrowGlw, ARROW_PX);
     }
     arrowHitbox = { x: _aX - _aW / 2 - 4, y: _aY - 14, w: _aW + 8, h: 28 };
+    ctx.restore();
 
     // ── SHIPS / OPTIONS ────────────────────────────────────
     const _canSelectShip = blockingEnabled === true && shipPowerState === 'up' && warpState === 'none';
     const _shipLabels = { protector: 'PROTECTOR', falcon: 'FALCON', swordfish: 'SWORDFISH', enterprise: 'ENTERPRISE' };
     if (OPT_W > 0) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(OPT_X, SY, OPT_W, SH); ctx.clip();
       _modLabel('SHIPS', OPT_X + OPT_W / 2, 'center');
       ctx.textAlign = 'center';
       ctx.font = `${_fShip}px "Press Start 2P", monospace`;
@@ -1878,6 +2115,7 @@
       ctx.fillStyle = _canSelectShip ? 'rgba(175,200,238,0.32)' : 'rgba(80,80,80,0.28)';
       ctx.fillText(_canSelectShip ? 'SELECT' : '—', OPT_X + OPT_W / 2, _ySub);
       shipMenuHitbox = { x: OPT_X, y: SY, w: OPT_W, h: SH };
+      ctx.restore();
     } else {
       shipMenuHitbox = { x: 0, y: 0, w: 0, h: 0 };
     }
@@ -1965,6 +2203,7 @@
   function connect() {
     if (evtSource) { evtSource.close(); evtSource = null; }
     evtSource = new EventSource('/api/pihole/events');
+    evtSource.onopen = () => { sseRetryDelay = 3000; };
     evtSource.onmessage = e => {
       try {
         const evts = JSON.parse(e.data);
@@ -1973,17 +2212,17 @@
     };
     evtSource.onerror = () => {
       if (evtSource) { evtSource.close(); evtSource = null; }
-      if (active) setTimeout(connect, 3000);
+      if (active) setTimeout(connect, sseRetryDelay);
+      sseRetryDelay = Math.min(sseRetryDelay * 2, 60000);
     };
   }
 
   function resize() {
+    safeBottom = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sab')) || 0;
     W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight;
-    shipX = W / 2; shipY = H * 0.65;
-    if (phLinkEl) {
-      const _sh = W < 480 ? 84 : W < 660 ? 94 : 108;
-      phLinkEl.style.bottom = Math.round(_sh * 0.35) + 'px';
-    }
+    shipX = W / 2; shipY = (H - safeBottom) * 0.65;
+    hudSH = W < 480 ? 84 : W < 660 ? 94 : 108;
+    if (settingsBtnEl) settingsBtnEl.style.bottom = Math.round(hudSH / 2 - 10 + safeBottom) + 'px';
   }
   window.addEventListener('resize', () => { if (active) resize(); });
   document.addEventListener('dragstart', e => e.preventDefault());
@@ -2020,6 +2259,8 @@
     carrierState = 'none'; carrierY = 0; carrierRestY = 0; carrierArrivingAt = 0; carrierLeavingAt = 0; launchAt = 0;
     shieldMenuOpen = false; shieldMenuItems = []; shieldHovered = false;
     shipMenuOpen = false; shipMenuItems = []; shipMenuHovered = false;
+    settingsMenuOpen = false; settingsMenuItems = [];
+    if (settingsBtnEl) { settingsBtnEl.style.display = 'block'; settingsBtnEl.classList.remove('menu-open'); }
     currentShip = sessionStorage.getItem('ph_ship') || 'protector'; warpState = 'none'; warpAt = 0; warpNextShip = null;
     shakeAt = 0; shakeDur = 0; shakeAmp = 0;
     mouseX = -1; mouseY = -1;
@@ -2051,7 +2292,12 @@
           if (_firstEnterFetch) _firstEnterFetch = false;
           const _prev = blockingEnabled;
           blockingEnabled = d.blocking;
-          if (!d.blocking && !_wasFirst && _prev !== false) shieldMenuOpen = false;
+          if (!d.blocking && !_wasFirst && _prev !== false) {
+            shieldMenuOpen = false;
+            shipMenuOpen = false; shipMenuItems = [];
+            settingsMenuOpen = false;
+            if (settingsBtnEl) settingsBtnEl.classList.remove('menu-open');
+          }
           if (!d.blocking) {
             // Recalibrate countdown from Pi-hole's timer whenever blocking is off with a known duration
             if (d.block_timer > 0) {
@@ -2061,6 +2307,7 @@
             if (_wasFirst && shipPowerState === 'up') {
               // Blocking was already off when we arrived - snap to docked, skip animation
               shipPowerState = 'down';
+              if (shipQuote) shipQuote.shownAt = performance.now() - 3000;
               carrierRestY = H * 0.78;
               carrierY = carrierRestY;
               carrierState = 'present';
@@ -2068,12 +2315,18 @@
               shipY = carrierRestY;
             } else if (!_wasFirst && shipPowerState === 'up') {
               shipPowerState = 'down';
+              if (shipQuote) shipQuote.shownAt = performance.now() - 3000;
+              if (drone.state !== 'docked') drone.state = 'docking';
+              if (drone2.state !== 'docked') drone2.state = 'docking';
             }
           } else if (_prev === false && !_wasFirst && shipPowerState === 'down') {
             // Blocking re-enabled remotely - start startup; carrier departs when startup completes (same as normal flow)
             blockingDuration = 0;
             sessionStorage.removeItem('ph_block_timer');
             gunCheckState = 0; gunCheckFiredAt = [0, 0];
+            shipMenuOpen = false; shipMenuItems = [];
+            settingsMenuOpen = false;
+            // No classList.remove here - button is about to fade via _btnHide; removing now would flash X→burger while fading
             shipPowerState = 'startup'; startupAt = performance.now();
           }
         }
@@ -2082,9 +2335,19 @@
         if (d.percent != null) hudStats.percent = d.percent;
       }).catch(() => {});
     }
-    if (phLinkEl) phLinkEl.style.display = 'block';
+    if (settingsBtnEl) settingsBtnEl.style.display = 'block';
     fetchPiholeStats();
     hudStatsPollTimer = setInterval(fetchPiholeStats, 1000);
+    if (_onVisible) document.removeEventListener('visibilitychange', _onVisible);
+    _onVisible = function() {
+      if (document.visibilityState !== 'visible') return;
+      fetchPiholeStats();
+      if (!evtSource) connect();
+      // reset interval so next tick is exactly 1s from now, not 0–999ms
+      if (hudStatsPollTimer) { clearInterval(hudStatsPollTimer); }
+      hudStatsPollTimer = setInterval(fetchPiholeStats, 1000);
+    };
+    document.addEventListener('visibilitychange', _onVisible);
     connect();
     requestAnimationFrame(t => {
       lastT = t; lastSpawn = t;
@@ -2104,11 +2367,13 @@
     gravityState = 'idle'; arrowHovered = false;
     shieldMenuOpen = false; shieldHovered = false; shieldMenuItems = [];
     shipMenuOpen = false; shipMenuHovered = false; shipMenuItems = [];
-    if (phLinkEl) phLinkEl.style.display = 'none';
+    settingsMenuOpen = false; settingsMenuItems = [];
+    if (settingsBtnEl) { settingsBtnEl.style.display = 'none'; settingsBtnEl.classList.remove('menu-open'); }
     warpState = 'none'; warpNextShip = null;
     blockingEnabled = null; // preserve blockingOffAt/blockingDuration so active timers survive exit/re-enter
     canvas.style.cursor = '';
     if (evtSource) { evtSource.close(); evtSource = null; }
+    if (_onVisible) { document.removeEventListener('visibilitychange', _onVisible); _onVisible = null; }
     setTimeout(() => {
       active = false;  // stop tick only after fade completes - game keeps running during fade
       ctx.clearRect(0, 0, W, H);
@@ -2136,6 +2401,7 @@
       if (blockingDuration > 0)
         sessionStorage.setItem('ph_block_timer', JSON.stringify({ wallOffAt: Date.now(), duration: blockingDuration }));
       shipPowerState = 'powerdown'; powerdownAt = performance.now();
+      if (shipQuote) shipQuote.shownAt = performance.now() - 3000;
       if (drone.state !== 'docked') drone.state = 'docking';
       if (drone2.state !== 'docked') drone2.state = 'docking';
     } else {
@@ -2202,6 +2468,28 @@
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left, my = e.clientY - rect.top;
 
+    // Settings menu open - click toggles a setting or dismisses
+    if (settingsMenuOpen) {
+      e.stopPropagation();
+      for (const item of settingsMenuItems) {
+        if (_inBox(mx, my, item.hitbox)) {
+          if      (item.key === 'friendlies')  { showFriendlies = !showFriendlies; _saveDisplaySettings(); }
+          else if (item.key === 'domain')      { showDomain     = !showDomain;     _saveDisplaySettings(); }
+          else if (item.key === 'client')      { showClient     = !showClient;     _saveDisplaySettings(); }
+          else if (item.key === 'pihole-link') {
+            const url = phLinkEl ? phLinkEl.dataset.href : null;
+            if (url) window.open(url, '_blank', 'noopener,noreferrer');
+            settingsMenuOpen = false;
+            if (settingsBtnEl) settingsBtnEl.classList.remove('menu-open');
+          }
+          return;
+        }
+      }
+      settingsMenuOpen = false;
+      if (settingsBtnEl) settingsBtnEl.classList.remove('menu-open');
+      // fall through — let the click reach shield/ship hitboxes
+    }
+
     // Ship menu open - click selects or dismisses; fall through to activate other targets
     if (shipMenuOpen) {
       e.stopPropagation();
@@ -2232,9 +2520,36 @@
       return;
     }
 
-    // Shield toggle
+    // Ship body easter egg
+    if (_inBox(mx, my, shipBodyHitbox) && warpState === 'none' && shipPowerState === 'up') {
+      e.stopPropagation();
+      if (!shipQuote && performance.now() >= shipQuoteCooldown) {
+        if (shipQuoteDeck.length === 0 || shipQuoteDeckFor !== currentShip) {
+          const _src = [...SHIP_QUOTES[currentShip]];
+          for (let _i = _src.length - 1; _i > 0; _i--) {
+            const _j = Math.floor(Math.random() * (_i + 1));
+            [_src[_i], _src[_j]] = [_src[_j], _src[_i]];
+          }
+          // seam protection: don't let first card of new deck match last shown (same ship reshuffle only)
+          if (_src.length > 1 && shipQuoteDeckFor === currentShip && _src[0] === shipQuoteLastShown) {
+            const _sw = 1 + Math.floor(Math.random() * (_src.length - 1));
+            [_src[0], _src[_sw]] = [_src[_sw], _src[0]];
+          }
+          shipQuoteDeck = _src;
+          shipQuoteDeckFor = currentShip;
+        }
+        const _chosen = shipQuoteDeck.shift();
+        shipQuoteLastShown = _chosen;
+        shipQuote = { text: _chosen, shownAt: performance.now() };
+      }
+      return;
+    }
+
+    // Shield toggle - also closes settings menu
     if (_inBox(mx, my, shieldHitbox)) {
       e.stopPropagation();
+      settingsMenuOpen = false;
+      if (settingsBtnEl) settingsBtnEl.classList.remove('menu-open');
       if (blockingEnabled === false && shipPowerState === 'down') { setBlocking(true); }
       else if (blockingEnabled === true && shipPowerState === 'up') { shieldMenuOpen = true; }
       return;
@@ -2254,13 +2569,14 @@
     arrowHovered = gravityState === 'idle' && _inBox(mouseX, mouseY, arrowHitbox);
     shieldHovered = _inBox(mouseX, mouseY, shieldHitbox);
     shipMenuHovered = _inBox(mouseX, mouseY, shipMenuHitbox) && blockingEnabled === true && shipPowerState === 'up' && warpState === 'none';
-    const overShieldMenu = shieldMenuOpen && shieldMenuItems.some(item => _inBox(mouseX, mouseY, item.hitbox));
-    const overShipMenu   = shipMenuOpen   && shipMenuItems.some(item => !item.active && _inBox(mouseX, mouseY, item.hitbox));
-    canvas.style.cursor = (arrowHovered || shieldHovered || overShieldMenu || shipMenuHovered || overShipMenu) ? 'pointer' : '';
+    const overShieldMenu   = shieldMenuOpen   && shieldMenuItems.some(item => _inBox(mouseX, mouseY, item.hitbox));
+    const overShipMenu     = shipMenuOpen     && shipMenuItems.some(item => !item.active && _inBox(mouseX, mouseY, item.hitbox));
+    const overSettingsMenu = settingsMenuOpen && settingsMenuItems.some(item => _inBox(mouseX, mouseY, item.hitbox));
+    canvas.style.cursor = (arrowHovered || shieldHovered || overShieldMenu || shipMenuHovered || overShipMenu || overSettingsMenu) ? 'pointer' : '';
   });
 
-  // The pihole icon sits above the canvas (z-index 16) and captures pointer events,
-  // so canvas mousemove never fires while hovering it - clear stale hover states here.
+  // The pihole icon and settings button sit above the canvas (z-index 16) and capture
+  // pointer events, so canvas mousemove never fires while hovering them.
   if (phLinkEl) {
     phLinkEl.addEventListener('mouseenter', () => {
       arrowHovered = false; shieldHovered = false; shipMenuHovered = false;
@@ -2269,6 +2585,22 @@
     phLinkEl.addEventListener('click', () => {
       const url = phLinkEl.dataset.href;
       if (url) window.open(url, '_blank', 'noopener,noreferrer');
+    });
+  }
+  if (settingsBtnEl) {
+    settingsBtnEl.addEventListener('mouseenter', () => {
+      arrowHovered = false; shieldHovered = false; shipMenuHovered = false;
+      canvas.style.cursor = '';
+    });
+    settingsBtnEl.addEventListener('click', e => {
+      e.stopPropagation();
+      if (!active) return;
+      settingsMenuOpen = !settingsMenuOpen;
+      settingsBtnEl.classList.toggle('menu-open', settingsMenuOpen);
+      if (settingsMenuOpen) {
+        shieldMenuOpen = false;
+        shipMenuOpen = false;
+      }
     });
   }
 

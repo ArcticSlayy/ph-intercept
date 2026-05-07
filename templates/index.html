@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>ph-intercept</title>
   <link rel="icon" href="/static/icons/favicon.svg" type="image/svg+xml">
 
@@ -27,12 +27,16 @@
 <script>
 window.BG_CONFIG = JSON.parse(document.getElementById('bg-config').textContent);
 if (window.BG_CONFIG.bg_image) {
-  document.getElementById('bg-image').style.backgroundImage = 'url("' + window.BG_CONFIG.bg_image + '")';
+  document.getElementById('bg-image').style.backgroundImage = 'url("' + window.BG_CONFIG.bg_image.replace(/"/g, '%22') + '")';
 }
 </script>
 
 <canvas id="starfield"></canvas>
 <canvas id="pihole-canvas"></canvas>
+
+<div id="settings-btn">
+  <span></span><span></span><span></span>
+</div>
 
 <div id="pihole-link" data-href="{{ pihole_dashboard | e }}">
   <img src="/static/icons/pihole.svg" alt="Pi-hole" draggable="false">

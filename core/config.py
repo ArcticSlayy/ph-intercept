@@ -1,6 +1,8 @@
 import os
 
 PIHOLE_BASE = os.environ.get("PIHOLE_URL", "http://pihole:8053/api")
+_ssl_raw = os.environ.get("PIHOLE_VERIFY_SSL", "true").strip().lower()
+PIHOLE_VERIFY_SSL = _ssl_raw not in ("false", "0", "no")
 PIHOLE_DASHBOARD = PIHOLE_BASE.rstrip('/').removesuffix('/api') + '/admin'
 RETURN_URL  = os.environ.get("RETURN_URL", "")
 BG_IMAGE    = os.environ.get("BG_IMAGE", "")

@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from core.config import BG_MODE, BG_IMAGE, PIHOLE_DASHBOARD, RETURN_URL, SKY_PRESET, SKY_PRESETS
+from core.config import BG_MODE, BG_IMAGE, PIHOLE_DASHBOARD, PIHOLE_VERIFY_SSL, RETURN_URL, SKY_PRESET, SKY_PRESETS
 from core.pihole import (
     add_ws_client, get_pihole_stats, query_poller,
     remove_ws_client, reset_watermark, toggle_blocking, trigger_gravity_update,
@@ -24,7 +24,7 @@ _http_client: httpx.AsyncClient | None = None
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     global _http_client
-    _http_client = httpx.AsyncClient(timeout=1.5, headers={"User-Agent": "ph-intercept"})
+    _http_client = httpx.AsyncClient(timeout=1.5, headers={"User-Agent": "ph-intercept"}, verify=PIHOLE_VERIFY_SSL)
     poller = asyncio.create_task(query_poller(_http_client))
     yield
     poller.cancel()
@@ -47,9 +47,11 @@ app.mount("/static", StaticFiles(directory=_base / "static"), name="static")
 app.mount("/bg", StaticFiles(directory=_base / "static" / "bg", check_dir=False), name="bg")
 
 
-class CacheStaticMiddleware(BaseHTTPMiddleware):
+class ResponseHeaderMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
         if request.url.path.startswith("/static/"):
             if request.url.path.endswith(('.woff2', '.woff', '.ttf', '.otf')):
                 response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
@@ -58,7 +60,7 @@ class CacheStaticMiddleware(BaseHTTPMiddleware):
         return response
 
 
-app.add_middleware(CacheStaticMiddleware)
+app.add_middleware(ResponseHeaderMiddleware)
 
 
 @app.get("/", response_class=HTMLResponse)
