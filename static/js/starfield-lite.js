@@ -142,6 +142,9 @@ if (BG_MODE === 'starfield') {
     bgDirty = true;
     resize();
     requestAnimationFrame(draw);
+  }).catch(() => {
+    resize();
+    requestAnimationFrame(draw);
   });
 } else {
   resize();

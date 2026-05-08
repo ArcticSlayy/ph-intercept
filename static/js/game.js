@@ -20,7 +20,7 @@
   const drone2Missiles = [];
   let hudGravity = null;
   let hudStats = { blocked: null, queries: null, percent: null };
-  let hudStatsPollTimer = null, _onVisible = null;
+  let hudStatsPollTimer = null, _onVisible = null, _exitTimer = null;
   let gravityState = 'idle'; // 'idle' | 'updating' | 'done'
   let gravityDoneAt = 0;
   let gravityPollTimer = null;
@@ -95,7 +95,7 @@
     protector:  ["Never give up, never surrender!", "By Grabthar's hammer, by the suns of Warvan, you shall be avenged.", "EXPLAIN.", "I'm just the guy who dies in episode 3!", "Can you form some sort of rudimentary lathe?", "Are you enjoying your Kep-mok blood ticks, Dr. Lazarus?", "It's all real."],
     falcon:     ["Never tell me the odds!", "I'd just as soon kiss a Wookiee.", "BUT SIR!!", "I am a Jedi, like my father before me.", "I can fly anything.", "It's not my fault!", "Shut him up or shut him down!"],
     swordfish:  ["Bang.", "Whatever happens, happens.", "I'm not going there to die. I'm going to find out if I'm really alive.", "I'm not a bounty hunter for the money.", "I love a man who can cook.", "Ed and Ein are hungry!"],
-    enterprise: ["Will you.. Please... Sit down?", "Live long and prosper.", "The needs of the many outweigh the needs of the few, or the one.", "He's dead, Jim.", "Risk is our business.", "Fascinating."],
+    enterprise: ["THERE ARE FOUR LIGHTS!", "Good tea, nice house.", "Shaka, when the walls fell.", "Will you.. Please... Sit down?", "Live long and prosper.", "The needs of the many outweigh the needs of the few, or the one.", "He's dead, Jim.", "Risk is our business.", "Fascinating."],
   };
   const DISABLE_OPTIONS = [
     { label: '10 SEC', timer: 10,  ms: 10000 },
@@ -2238,6 +2238,7 @@
 
   // ── Public API ────────────────────────────────────────────────────
   window.enterPiholeMode = function() {
+    if (_exitTimer !== null) { clearTimeout(_exitTimer); _exitTimer = null; active = false; }
     if (active) return;
     active = true;
     canvas.tabIndex = -1;
@@ -2386,7 +2387,8 @@
     canvas.style.cursor = '';
     if (evtSource) { evtSource.close(); evtSource = null; }
     if (_onVisible) { document.removeEventListener('visibilitychange', _onVisible); _onVisible = null; }
-    setTimeout(() => {
+    _exitTimer = setTimeout(() => {
+      _exitTimer = null;
       active = false; if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null; }
       ctx.clearRect(0, 0, W, H);
       shipPowerState = 'up'; gunCheckState = 0; lastEnemyAt = 0;

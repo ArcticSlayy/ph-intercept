@@ -213,3 +213,16 @@ All configuration is via environment variables in `compose.yaml`.
 - Network route from the container to your Pi-hole
 
 The container listens on port 4653. The compose file includes an optional static IP block for existing Docker networks.
+
+---
+
+## Testing
+
+I may have gone a little overboard.
+
+ph-intercept is developed against a full test suite covering four layers:
+
+- **Pi-hole client** -- async unit tests for every auth path (including passwordless and lock contention), session management, query status classification, the broadcast queue, and the live query poller
+- **API layer** -- endpoint tests for every route, security headers, cache-control rules, and input validation
+- **Browser** -- Playwright integration tests across Chromium, Firefox, and WebKit covering page load, canvas sizing, SSE connection and reconnect, settings persistence, font loading, and bfcache reentry
+- **Devices** -- the same Playwright suite run against 40+ real device profiles: RPi touchscreens, Fire tablets, iPads, Android tablets, HiDPI displays, 4K, ultrawides, and orientation changes
