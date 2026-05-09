@@ -12,7 +12,7 @@ All notable changes to ph-intercept are documented here.
 - **Pi-hole v6 query status coverage** -- EDE-blocked queries (string status `"EDE"`, integer status 18) are now counted as blocked; cached-stale queries (status 17) are now counted as cache hits. The stale `"BLACKLIST"` string status has been removed.
 - **Carrier state race** -- the carrier now correctly departs if blocking is re-enabled before it finishes arriving (triggered by a rapid external toggle or returning from a backgrounded tab).
 - **Pihole mode exit race** -- if `enterPiholeMode` was called while the exit animation timer was still pending, the game would bail out and stay dead. The timer is now cancelled and the game restarts cleanly.
-- **Starfield degradation** -- if `stars.json` fails to load, the starfield now falls back gracefully instead of getting stuck before rendering.
+- **Starfield degradation** -- if `stars-lite.json` fails to load, the starfield now falls back gracefully instead of getting stuck before rendering.
 - **Background image injection** -- `BG_IMAGE` is now validated as a local path or `http(s)://` URL before being written into CSS; character encoding expanded to cover `"`, `'`, and `\`.
 
 ### Security
