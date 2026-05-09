@@ -5,11 +5,13 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import httpx
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, StreamingResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+from starlette.applications import Starlette
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import HTMLResponse, JSONResponse, StreamingResponse
+from starlette.routing import Mount, Route
+from starlette.staticfiles import StaticFiles
+from starlette.templating import Jinja2Templates
 
 from core.config import BG_MODE, BG_IMAGE, PIHOLE_DASHBOARD, PIHOLE_VERIFY_SSL, RETURN_URL, SKY_PRESET, SKY_PRESETS
 from core.pihole import (
@@ -22,7 +24,7 @@ _http_client: httpx.AsyncClient | None = None
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI):
+async def lifespan(_app):
     global _http_client
     _http_client = httpx.AsyncClient(timeout=1.5, headers={"User-Agent": "ph-intercept"}, verify=PIHOLE_VERIFY_SSL)
     poller = asyncio.create_task(query_poller(_http_client))
@@ -40,12 +42,8 @@ async def lifespan(_app: FastAPI):
     await _http_client.aclose()
 
 
-app = FastAPI(lifespan=lifespan)
 _base = Path(__file__).parent
 templates = Jinja2Templates(directory=_base / "templates")
-app.mount("/static", StaticFiles(directory=_base / "static"), name="static")
-app.mount("/bg", StaticFiles(directory=_base / "static" / "bg", check_dir=False), name="bg")
-
 
 _CSP = (
     "default-src 'self'; "
@@ -72,11 +70,7 @@ class ResponseHeaderMiddleware(BaseHTTPMiddleware):
         return response
 
 
-app.add_middleware(ResponseHeaderMiddleware)
-
-
-@app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
+async def index(request: Request) -> HTMLResponse:
     preset = SKY_PRESETS.get(SKY_PRESET, SKY_PRESETS["summer_triangle"])
     return templates.TemplateResponse(request, "index.html", {
         "bg_mode": BG_MODE,
@@ -91,23 +85,21 @@ async def index(request: Request):
     })
 
 
-@app.get("/api/pihole/stats")
-async def pihole_stats():
+async def pihole_stats(_request: Request) -> JSONResponse:
     data = await get_pihole_stats(_http_client)
     if not data:
-        return {}
-    return {
+        return JSONResponse({})
+    return JSONResponse({
         "percent":  data.get("percent"),
         "queries":  data.get("queries"),
         "blocked":  data.get("blocked"),
         "gravity":  data.get("gravity"),
         "blocking": data.get("blocking"),
         "block_timer": data.get("block_timer"),
-    }
+    })
 
 
-@app.post("/api/pihole/toggle")
-async def pihole_toggle(request: Request):
+async def pihole_toggle(request: Request) -> JSONResponse:
     body = await request.json()
     timer = body.get("timer")
     if timer is not None:
@@ -117,16 +109,14 @@ async def pihole_toggle(request: Request):
                 timer = None
         except (TypeError, ValueError):
             timer = None
-    return await toggle_blocking(_http_client, bool(body.get("enable", True)), timer)
+    return JSONResponse(await toggle_blocking(_http_client, bool(body.get("enable", True)), timer))
 
 
-@app.post("/api/pihole/gravity-update")
-async def pihole_gravity_update():
-    return await trigger_gravity_update(_http_client)
+async def pihole_gravity_update(request: Request) -> JSONResponse:
+    return JSONResponse(await trigger_gravity_update(_http_client))
 
 
-@app.get("/api/pihole/events")
-async def pihole_events():
+async def pihole_events(request: Request) -> StreamingResponse:
     async def generate():
         q: asyncio.Queue = asyncio.Queue(maxsize=60)
         add_ws_client(q)
@@ -135,7 +125,7 @@ async def pihole_events():
         try:
             while True:
                 payload = await q.get()
-                if payload is None:  # sentinel from _broadcast on queue overflow
+                if payload is None:
                     break
                 yield f"data: {payload}\n\n"
         except asyncio.CancelledError:
@@ -148,3 +138,18 @@ async def pihole_events():
         media_type="text/event-stream",
         headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
     )
+
+
+app = Starlette(
+    lifespan=lifespan,
+    routes=[
+        Route("/", index),
+        Route("/api/pihole/stats", pihole_stats),
+        Route("/api/pihole/toggle", pihole_toggle, methods=["POST"]),
+        Route("/api/pihole/gravity-update", pihole_gravity_update, methods=["POST"]),
+        Route("/api/pihole/events", pihole_events),
+        Mount("/static", StaticFiles(directory=_base / "static"), name="static"),
+        Mount("/bg", StaticFiles(directory=_base / "static" / "bg", check_dir=False), name="bg"),
+    ],
+)
+app.add_middleware(ResponseHeaderMiddleware)
