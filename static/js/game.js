@@ -20,7 +20,7 @@
   const drone2Missiles = [];
   let hudGravity = null;
   let hudStats = { blocked: null, queries: null, percent: null };
-  let hudStatsPollTimer = null, _onVisible = null, _onFocus = null, _exitTimer = null;
+  let hudStatsPollTimer = null, _onVisible = null, _onFocus = null, _sleepCheckTimer = null, _exitTimer = null;
   let gravityState = 'idle'; // 'idle' | 'updating' | 'done'
   let gravityDoneAt = 0;
   let gravityPollTimer = null;
@@ -2378,6 +2378,19 @@
     if (_onFocus) window.removeEventListener('focus', _onFocus);
     _onFocus = () => clearSpriteCache();
     window.addEventListener('focus', _onFocus);
+    // Sleep/wake detection: neither visibilitychange nor focus fires when the machine
+    // sleeps while the tab stays focused. A timer that fires significantly late means
+    // the machine woke from sleep -- rebuild the sprite cache and revive the RAF loop.
+    if (_sleepCheckTimer) clearInterval(_sleepCheckTimer);
+    let _sleepCheckLast = Date.now();
+    _sleepCheckTimer = setInterval(() => {
+      const now = Date.now();
+      if (now - _sleepCheckLast > 12000) {
+        clearSpriteCache();
+        if (active) { if (_rafId !== null) cancelAnimationFrame(_rafId); _rafId = requestAnimationFrame(tick); }
+      }
+      _sleepCheckLast = now;
+    }, 4000);
     connect();
     requestAnimationFrame(t => {
       lastT = t; lastSpawn = t;
@@ -2405,6 +2418,7 @@
     if (evtSource) { evtSource.close(); evtSource = null; }
     if (_onVisible) { document.removeEventListener('visibilitychange', _onVisible); _onVisible = null; }
     if (_onFocus) { window.removeEventListener('focus', _onFocus); _onFocus = null; }
+    if (_sleepCheckTimer) { clearInterval(_sleepCheckTimer); _sleepCheckTimer = null; }
     _exitTimer = setTimeout(() => {
       _exitTimer = null;
       active = false; if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null; }
