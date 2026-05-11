@@ -32,7 +32,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256m
+          memory: 128m
 
     environment:
       # REQUIRED: Pi-hole v6 API endpoint
