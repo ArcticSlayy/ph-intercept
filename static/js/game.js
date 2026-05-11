@@ -100,9 +100,9 @@
     falcon:     ["Never tell me the odds!", "I'd just as soon kiss a Wookiee.", "BUT SIR!!", "I am a Jedi, like my father before me.", "I can fly anything.", "It's not my fault!", "Shut him up or shut him down!"],
     swordfish:  ["Bang.", "Whatever happens, happens.", "I'm not going there to die. I'm going to find out if I'm really alive.", "I'm not a bounty hunter for the money.", "I love a man who can cook.", "Ed and Ein are hungry!"],
     enterprise: ["THERE ARE FOUR LIGHTS!", "Good tea, nice house.", "Shaka, when the walls fell.", "Will you.. Please... Sit down?", "Live long and prosper.", "The needs of the many outweigh the needs of the few, or the one.", "He's dead, Jim.", "Risk is our business.", "Fascinating."],
-    serenity:   ["Time for some thrilling heroics."],
-    normandy:   ["Just because I like you doesn't mean I won't kill you."],
-    pes:        ["Good news everyone!"],
+    serenity:   ["Time for some thrilling heroics.", "I am a leaf on the wind. Watch how I soar.", "Curse your sudden but inevitable betrayal!", "Also, I can kill you with my brain."],
+    normandy:   ["Just because I like you doesn't mean I won't kill you.", "I'm Commander Shepard, and this is my favorite store on the Citadel.", "I should go."],
+    pes:        ["Good news everyone!", "I don't want to live on this planet anymore.", "Shut up and take my money!", "I did do the nasty in the pasty."],
     inbound:    ["[coming soon.]"],
   };
   const DISABLE_OPTIONS = [
@@ -449,7 +449,7 @@
     shipX += (goalX - shipX) * Math.min(1, goalXLerp * dt);
 
     // Ship Y retreat - rise when enemies descend, settle back during gaps
-    const _carrierDockY = carrierRestY;
+    const _carrierDockY = carrierRestY + (_shipBayIdx >= 0 ? CARRIER_BAY_DY[_shipBayIdx] : 0);
     let goalY, goalYLerp;
     if ((carrierState === 'arriving' || carrierState === 'present') &&
         (shipPowerState === 'down' || shipPowerState === 'startup')) {
@@ -798,20 +798,20 @@
   _phIcon.src = '/static/icons/pihole.svg';
 
   const _SHIP_CONFIGS = {
-    protector:  { bmp: PROTECTOR_BMP,     color: 'rgba(195,208,240,0.95)', glow: 'rgba(170,190,235,0.55)', dimColor: 'rgba(195,208,240,0.22)',
+    protector:  { bmp: PROTECTOR_BMP,     color: 'rgba(195,208,240,0.95)', glow: 'rgba(170,190,235,0.55)', dimColor: 'rgba(195,208,240,0.55)',
                   flares: [{ xOff: -20, yOff: 0, size: 1, burstWScale: 0 }, { xOff: 20, yOff: 0, size: 1, burstWScale: 0 }] },
-    falcon:     { bmp: FALCON_BMP,     color: 'rgba(195,208,240,0.95)', glow: 'rgba(170,190,235,0.45)', dimColor: 'rgba(195,208,240,0.22)',
+    falcon:     { bmp: FALCON_BMP,     color: 'rgba(195,208,240,0.95)', glow: 'rgba(170,190,235,0.45)', dimColor: 'rgba(195,208,240,0.55)',
                   flares: [{ xOff: -3, yOff: 1, size: 3.2, len: 0.75, taper: 0.85, shape: 'column', wobble: 0.15, burstWScale: 0 }] },
-    swordfish:  { bmp: SWORDFISH_BMP,  color: 'rgba(207,50,33,0.95)', glow: 'rgba(203,38,20,0.55)', dimColor: 'rgba(207,50,33,0.22)',
+    swordfish:  { bmp: SWORDFISH_BMP,  color: 'rgba(207,50,33,0.95)', glow: 'rgba(203,38,20,0.55)', dimColor: 'rgba(207,50,33,0.55)',
                   flares: [{ xOff: 0, yOff: 5, size: 1.5, len: 1.0, burstWScale: 0 }] },
-    enterprise: { bmp: ENTERPRISE_BMP, color: 'rgba(195,208,240,0.95)', glow: 'rgba(170,190,235,0.48)', dimColor: 'rgba(195,208,240,0.22)',
+    enterprise: { bmp: ENTERPRISE_BMP, color: 'rgba(195,208,240,0.95)', glow: 'rgba(170,190,235,0.48)', dimColor: 'rgba(195,208,240,0.55)',
                   flares: [{ xOff: -13.5, yOff: 2, size: 0.9, burstWScale: 0 }, { xOff: 13.5, yOff: 2, size: 0.9, burstWScale: 0 }, { xOff: 0, yOff: -40, size: 0.50, burstWScale: 0, col: 'fire' }] },
-    serenity:   { bmp: SERENITY_BMP,   color: 'rgba(195,208,240,0.95)', glow: 'rgba(170,190,235,0.55)', dimColor: 'rgba(195,208,240,0.22)',
+    serenity:   { bmp: SERENITY_BMP,   color: 'rgba(195,208,240,0.95)', glow: 'rgba(170,190,235,0.55)', dimColor: 'rgba(195,208,240,0.55)',
                   flares: [{ xOff: -19.5, yOff: -17, size: 1, burstWScale: 0 }, { xOff: 19.5, yOff: -17, size: 1, burstWScale: 0 }] },
-    normandy:   { bmp: NORMANDY_BMP,   color: 'rgba(195,208,240,0.95)', glow: 'rgba(170,190,235,0.55)', dimColor: 'rgba(195,208,240,0.22)',
+    normandy:   { bmp: NORMANDY_BMP,   color: 'rgba(195,208,240,0.95)', glow: 'rgba(170,190,235,0.55)', dimColor: 'rgba(195,208,240,0.55)',
                   flares: [{ xOff: -7.5, yOff: 4, size: 0.8, burstWScale: 0 }, { xOff: 7.5, yOff: 4, size: 0.8, burstWScale: 0 }, { xOff: -16.5, yOff: -2, size: 0.8, burstWScale: 0 }, { xOff: 16.5, yOff: -2, size: 0.8, burstWScale: 0 }] },
-    pes:        { bmp: PES_BMP,        color: 'rgba(89,223,139,0.95)', glow: 'rgba(89,223,139,0.55)', dimColor: 'rgba(89,223,139,0.22)',
-                  flares: [{ xOff: 0, yOff: -24, size: 1.5, burstWScale: 0 }] },
+    pes:        { bmp: PES_BMP,        color: 'rgba(89,223,139,0.95)', glow: 'rgba(89,223,139,0.55)', dimColor: 'rgba(89,223,139,0.55)',
+                  flares: [{ xOff: 0, yOff: -24, size: 1.5, burstWScale: 0 }], flareSplitRow: 22, launchBlastYOff: -24, launchBlastSourceHW: 4.5 },
     inbound:    { bmp: INBOUND_BMP,    color: 'rgba(140,145,155,0.50)', glow: 'rgba(120,125,135,0.28)', dimColor: 'rgba(140,145,155,0.15)',
                   flares: [] },
   };
@@ -865,9 +865,9 @@
       ctx.globalAlpha = _cFade;
       { // Interior fill - subtle sci-fi deck surface (drawn before hull so hull is on top)
         const _iOx = Math.round(ccx - 75 * CARRIER_PX / 2) + 2 * CARRIER_PX;
-        const _iOy = Math.round(ccy - 24 * CARRIER_PX / 2) + 1 * CARRIER_PX;
+        const _iOy = Math.round(ccy - CARRIER_BMP.length * CARRIER_PX / 2) + 1 * CARRIER_PX;
         ctx.fillStyle = 'rgba(25, 65, 140, 0.07)';
-        ctx.fillRect(_iOx, _iOy, 71 * CARRIER_PX, 22 * CARRIER_PX);
+        ctx.fillRect(_iOx, _iOy, 71 * CARRIER_PX, (CARRIER_BMP.length - 2) * CARRIER_PX);
       }
       drawBmp(ctx, CARRIER_BMP, ccx, ccy, 'rgba(130,145,170,0.88)', 'rgba(100,120,160,0.28)', CARRIER_PX);
       for (let li = 0; li < CARRIER_LIGHT_OFFSETS.length; li++) {
@@ -882,31 +882,31 @@
       // Ground crew - emerge from top-centre hatch when blocking off 30s+
       {
         const _hatchX = ccx;
-        const _hatchY = ccy - 63;  // under island structure (bitmap row 1)
-        const _topCY  = ccy - 48;  // corridor above all ships (row ~3.5)
-        const _botCY  = ccy + 48;  // corridor below all ships (row ~19.5)
-        const _bumpY  = ccy + 63;  // fuel bump on bottom border (bitmap row 22)
-        // Gap X offsets from ccx for routing fuel crew between ship bays
-        const _gapDXs = [-90, 0, 90, 90];
+        const _hatchY = ccy - 111;  // under island structure (bitmap row 1, 40-row carrier)
+        const _topRail = ccy - 90;  // above row 1 ships (top safe corridor)
+        const _midCY   = ccy +   6; // between ship rows (mid safe corridor)
+        const _botRail = ccy + 102; // below row 2 ships (bottom safe corridor)
+        // Gap X offsets from ccx for routing fuel crew to each ship bay (between column pairs)
+        const _gapDXs = [-90, 0, 90, 90, -90, 0, 90];
 
         const _crewEligible = carrierState === 'present' && shipPowerState === 'down'
             && blockingEnabled === false && t - blockingOffAt >= 30000;
 
-        // Build a ship-avoiding flee path from a crew member's current position
+        // Build a ship-avoiding flee path using per-crew fleeX/fleeViaY safe corridor
         const _makeFleePath = c => {
-          if (c.y <= _topCY) {
-            return [{ x: _hatchX, y: _hatchY }];
+          const fx = c.fleeX;
+          const fy = c.fleeViaY;
+          const pts = [];
+          if (c.y <= fy) {
+            if (Math.abs(c.x - _hatchX) > 6) pts.push({ x: _hatchX, y: c.y });
+            pts.push({ x: _hatchX, y: _hatchY });
+          } else {
+            if (Math.abs(c.x - fx) > 10) pts.push({ x: fx, y: c.y });
+            pts.push({ x: fx, y: fy });
+            if (Math.abs(fx - _hatchX) > 6) pts.push({ x: _hatchX, y: fy });
+            pts.push({ x: _hatchX, y: _hatchY });
           }
-          if (!c.gapX) {
-            return [{ x: _hatchX, y: _topCY }, { x: _hatchX, y: _hatchY }];
-          }
-          const onGapCol = Math.abs(c.x - c.gapX) < 6;
-          return [
-            ...(!onGapCol || c.y > _botCY ? [{ x: c.gapX, y: _botCY }] : []),
-            { x: c.gapX, y: _topCY },
-            { x: _hatchX, y: _topCY },
-            { x: _hatchX, y: _hatchY },
-          ];
+          return pts;
         };
 
         if (shipPowerState === 'startup') {
@@ -949,7 +949,7 @@
               }
             }
           } else if (c.state === 'at_post') {
-            if (t - c.spawnedAt >= c.lifetime) {
+            if (t - c.stateAt >= c.lifetime) {
               c.state = 'returning'; c.stateAt = t; c.wpIdx = 0;
               c.fromX = c.x; c.fromY = c.y;
               if (c.type === 'fuel') lastFuelAt = t;
@@ -973,62 +973,86 @@
             : ['inspect', 'signal', 'repair', 'idle'][Math.floor(Math.random() * 4)];
           const _shipIdx = CARRIER_SHIP_ORDER.indexOf(currentShip);
           const _bayX = ccx + CARRIER_BAY_DX[_shipIdx];
+          const _bayDY = CARRIER_BAY_DY[_shipIdx];
           const _gapX = ccx + _gapDXs[_shipIdx];
+          const _isRow1 = _bayDY < 0;
+          const _rowTopCY = _isRow1 ? _topRail : _midCY;
+          const _bumpX = ccx + CARRIER_BUMP_DX[_shipIdx];
+          const _bumpY = ccy + CARRIER_BUMP_DY[_shipIdx];
+          const _isSideBump = _isRow1; // row 1 ships fuel from port/starboard side bumps
 
-          let _waypoints, _returnPath, _gapRef;
+          let _waypoints, _returnPath, _fleeX, _fleeViaY;
           if (_type === 'fuel') {
-            const _shipBackY = ccy + Math.ceil(bmpH(_SHIP_CONFIGS[currentShip].bmp) * PX / 2) - (currentShip === 'enterprise' ? 9 : 0) + (currentShip === 'swordfish' ? 4 : 0) - (currentShip === 'protector' ? 9 : 0) + (currentShip === 'falcon' ? 2 : 0);
-            _gapRef = _gapX;
-            _waypoints = [
-              { x: _hatchX, y: _topCY },   // step down from hatch to top corridor
-              { x: _gapX,   y: _topCY },   // slide to gap lane
-              { x: _gapX,   y: _botCY },   // drop through gap past all ships
-              { x: _bayX,   y: _bumpY - 4 }, // approach fuel bump
-              { x: _bayX,   y: _shipBackY }, // walk hose up to ship back
-            ];
-            _returnPath = [
-              { x: _bayX,   y: _bumpY - 4 }, // walk hose back to bump
-              { x: _gapX,   y: _botCY },   // slide to gap lane
-              { x: _gapX,   y: _topCY },   // climb through gap
-              { x: _hatchX, y: _topCY },   // slide to hatch column
-              { x: _hatchX, y: _hatchY },  // return to hatch
-            ];
+            const _shipBackY = ccy + _bayDY + Math.ceil(bmpH(_SHIP_CONFIGS[currentShip].bmp) * PX / 2) - (currentShip === 'enterprise' ? 9 : 0) + (currentShip === 'swordfish' ? 4 : 0) - (currentShip === 'protector' ? 9 : 0) + (currentShip === 'falcon' ? 2 : 0);
+            if (_isSideBump) {
+              _fleeX = _gapX; _fleeViaY = _topRail;
+              _waypoints = [
+                { x: _hatchX, y: _topRail },        // step into top corridor
+                { x: _gapX,   y: _topRail },        // slide to gap column
+                { x: _gapX,   y: _bumpY },          // descend in gap to bump level
+                { x: _bumpX,  y: _bumpY },          // walk to fuel port
+                { x: _bayX,   y: _shipBackY },       // park under ship bottom edge
+              ];
+              _returnPath = [
+                { x: _bumpX,  y: _bumpY },          // step back from ship
+                { x: _gapX,   y: _bumpY },          // walk back toward gap column
+                { x: _gapX,   y: _topRail },        // climb to top corridor
+                { x: _hatchX, y: _topRail },        // slide to hatch column
+                { x: _hatchX, y: _hatchY },         // return to hatch
+              ];
+            } else {
+              _fleeX = _gapX; _fleeViaY = _midCY;
+              _waypoints = [
+                { x: _hatchX, y: _midCY },      // descend to mid corridor
+                { x: _gapX,   y: _midCY },      // slide to gap lane
+                { x: _gapX,   y: _botRail },    // drop to bottom rail
+                { x: _bumpX,  y: _bumpY - 4 }, // approach bottom bump
+                { x: _bayX,   y: _shipBackY },  // walk hose up to ship back
+              ];
+              _returnPath = [
+                { x: _bumpX,  y: _bumpY - 4 }, // walk hose back to bump
+                { x: _gapX,   y: _botRail },    // slide to gap lane
+                { x: _gapX,   y: _midCY },      // climb through gap to mid corridor
+                { x: _hatchX, y: _midCY },      // slide to hatch column
+                { x: _hatchX, y: _hatchY },     // return to hatch
+              ];
+            }
           } else {
             const _takenSpots = crewMembers
               .filter(c => c.type !== 'fuel' && c.waypoints)
               .map(c => c.waypoints[c.waypoints.length - 1]);
             if (Math.random() < 0.4) {
               // Work alongside the ship in the gap lane
-              _gapRef = _gapX;
+              _fleeX = _gapX; _fleeViaY = _rowTopCY;
               let _sideY, _sa = 0;
               do {
-                _sideY = ccy + Math.round((Math.random() - 0.5) * 48);
+                _sideY = ccy + _bayDY + Math.round((Math.random() - 0.5) * 48);
                 _sa++;
               } while (_sa < 20 && _takenSpots.some(s => Math.abs(s.x - _gapX) < 5 && Math.abs(s.y - _sideY) < 14));
               _waypoints = [
-                { x: _hatchX, y: _topCY },
-                { x: _gapX,   y: _topCY },
+                { x: _hatchX, y: _rowTopCY },
+                { x: _gapX,   y: _rowTopCY },
                 { x: _gapX,   y: _sideY },
               ];
               _returnPath = [
-                { x: _gapX,   y: _topCY },
-                { x: _hatchX, y: _topCY },
+                { x: _gapX,   y: _rowTopCY },
+                { x: _hatchX, y: _rowTopCY },
                 { x: _hatchX, y: _hatchY },
               ];
             } else {
-              // Work in the top corridor above the active ship
-              _gapRef = undefined;
+              // Work in the corridor at the active ship's row level
+              _fleeX = _hatchX; _fleeViaY = _rowTopCY;
               let _workX, _attempts = 0;
               do {
                 _workX = _bayX + Math.round((Math.random() - 0.5) * 40);
                 _attempts++;
-              } while (_attempts < 20 && _takenSpots.some(s => Math.abs(s.y - _topCY) < 5 && Math.abs(s.x - _workX) < 14));
+              } while (_attempts < 20 && _takenSpots.some(s => Math.abs(s.y - _rowTopCY) < 5 && Math.abs(s.x - _workX) < 14));
               _waypoints = [
-                { x: _hatchX, y: _topCY },
-                { x: _workX,  y: _topCY },
+                { x: _hatchX, y: _rowTopCY },
+                { x: _workX,  y: _rowTopCY },
               ];
               _returnPath = [
-                { x: _hatchX, y: _topCY },
+                { x: _hatchX, y: _rowTopCY },
                 { x: _hatchX, y: _hatchY },
               ];
             }
@@ -1038,7 +1062,8 @@
             type: _type, x: _hatchX, y: _hatchY, fromX: _hatchX, fromY: _hatchY,
             state: 'walking', stateAt: t, wpIdx: 0,
             waypoints: _waypoints, returnPath: _returnPath,
-            bumpX: _bayX, bumpY: _bumpY, gapX: _gapRef,
+            bumpX: _bumpX, bumpY: _bumpY, fleeX: _fleeX, fleeViaY: _fleeViaY,
+            hoseFwdWpIdx: _waypoints.length - 1,
             spawnedAt: t, lifetime: 18000 + Math.random() * 14000,
           });
           crewNextSpawn = t + 5000 + Math.random() * 8000;
@@ -1058,10 +1083,10 @@
                      : c.type === 'idle'    ? 'rgba(180,200,180,0.85)'
                      :                        'rgba(255,225,70,0.95)';
 
-          // Fuel hose - extends as he walks to ship back, retracts as he returns
+          // Fuel hose - extends as he walks to ship, retracts as he returns
           if (c.type === 'fuel' && (
               c.state === 'at_post' ||
-              (c.state === 'walking'   && c.wpIdx === 4) ||
+              (c.state === 'walking'   && c.wpIdx === c.hoseFwdWpIdx) ||
               (c.state === 'returning' && c.wpIdx === 0)
           )) {
             ctx.strokeStyle = `rgba(255,160,40,${(0.7 + 0.2 * Math.sin(t * 0.005)).toFixed(2)})`;
@@ -1104,14 +1129,14 @@
         }
       }
       // Redraw hatch structure rows on top of crew so crew appears behind it
-      drawBmp(ctx, CARRIER_BMP.slice(1, 3), ccx, ccy - 60, 'rgba(130,145,170,0.88)', 'rgba(100,120,160,0.28)', CARRIER_PX);
-      // Inactive ships drawn after crew so ships occlude crew walking through bays
-      const _deckY = ccy;
+      drawBmp(ctx, CARRIER_BMP.slice(1, 3), ccx, ccy - 108, 'rgba(130,145,170,0.88)', 'rgba(100,120,160,0.28)', CARRIER_PX);
+      // Inactive ships drawn after crew — crew always appears underneath parked ships
       for (let bi = 0; bi < CARRIER_SHIP_ORDER.length; bi++) {
         const bShip = CARRIER_SHIP_ORDER[bi];
         const bx = ccx + CARRIER_BAY_DX[bi];
+        const by = ccy + CARRIER_BAY_DY[bi];
         if (bShip !== currentShip) {
-          drawBmp(ctx, _SHIP_CONFIGS[bShip].bmp, bx, _deckY, _SHIP_CONFIGS[bShip].dimColor, null, PX);
+          drawBmp(ctx, _SHIP_CONFIGS[bShip].bmp, bx, by, _SHIP_CONFIGS[bShip].dimColor, null, PX);
         }
       }
 
@@ -1578,7 +1603,8 @@
     // Descent streak (landing) and launch streak (departing)
     if (carrierState !== 'none' && warpState === 'none') {
       if ((carrierState === 'arriving' || carrierState === 'present') && shipPowerState === 'down') {
-        const _dockY = carrierRestY;
+        const _shipBi = CARRIER_SHIP_ORDER.indexOf(currentShip);
+        const _dockY = carrierRestY + (_shipBi >= 0 ? CARRIER_BAY_DY[_shipBi] : 0);
         const _descTotal = _dockY - H * 0.65;
         const _descProg = _descTotal > 0 ? Math.min(1, (shipY - H * 0.65) / _descTotal) : 0;
         // Fade out when within 30px of dock to kill the trail on arrival
@@ -1703,28 +1729,26 @@
       const flicker = sp < 0.55
         ? Math.abs(Math.sin(t * 0.045)) * Math.abs(Math.sin(t * 0.011 + 1.3))
         : 1;
-      const sa = 0.22 + sp * 0.73;
+      const sa = 0.55 + sp * 0.40;
       const pdCol  = _SCFG.color.replace(/[\d.]+\)$/, `${sa.toFixed(3)})`);
       const pdGlow = sp > 0.35 ? _SCFG.glow : null;
-      drawBmp(ctx, _shipBmp, cx, cy, pdCol, pdGlow, PX);
-      ctx.save();
-      ctx.globalAlpha = Math.max(0, flicker * sp);
-      for (const f of _SCFG.flares) drawEngineFlare(cx + f.xOff, flareBase + f.yOff, ft, f.size, (f.len ?? f.size), (f.taper ?? 0.6), (f.shape ?? 'arch'), (f.wobble ?? 1), (f.col ?? null));
-      ctx.restore();
+      const _sr = _SCFG.flareSplitRow ?? bmpH(_shipBmp);
+      drawBmp(ctx, _shipBmp, cx, cy, pdCol, pdGlow, PX, false, 0, _sr);
+      ctx.save(); ctx.globalAlpha = Math.max(0, flicker * sp); for (const f of _SCFG.flares) drawEngineFlare(cx + f.xOff, flareBase + f.yOff, ft, f.size, (f.len ?? f.size), (f.taper ?? 0.6), (f.shape ?? 'arch'), (f.wobble ?? 1), (f.col ?? null)); ctx.restore();
+      if (_SCFG.flareSplitRow != null) drawBmp(ctx, _shipBmp, cx, cy, pdCol, pdGlow, PX, false, _sr);
     } else if (shipPowerState === 'startup') {
       const sp = Math.min(1, (t - startupAt) / STARTUP_DUR);
       const burstBase = sp < 0.20 ? 2.5 * (1 - sp / 0.20) : 0;
       const flicker = sp > 0.20 && sp < 0.48
         ? Math.abs(Math.sin(t * 0.045)) * Math.abs(Math.sin(t * 0.011 + 1.3))
         : 1;
-      const sa = 0.22 + sp * 0.73;
+      const sa = 0.55 + sp * 0.40;
       const suCol  = _SCFG.color.replace(/[\d.]+\)$/, `${sa.toFixed(3)})`);
       const suGlow = sp > 0.35 ? _SCFG.glow : null;
-      drawBmp(ctx, _shipBmp, cx, cy, suCol, suGlow, PX);
-      ctx.save();
-      ctx.globalAlpha = sp < 0.20 ? sp / 0.20 : Math.min(1, flicker);
-      for (const f of _SCFG.flares) { const fbW = 1 + burstBase * (f.burstWScale ?? (f.burstScale ?? 1)); const fbL = 1 + burstBase * (f.burstScale ?? 1); drawEngineFlare(cx + f.xOff, flareBase + f.yOff, ft, f.size * fbW, (f.len ?? f.size) * fbL, (f.taper ?? 0.6), (f.shape ?? 'arch'), (f.wobble ?? 1), (f.col ?? null)); }
-      ctx.restore();
+      const _sr = _SCFG.flareSplitRow ?? bmpH(_shipBmp);
+      drawBmp(ctx, _shipBmp, cx, cy, suCol, suGlow, PX, false, 0, _sr);
+      ctx.save(); ctx.globalAlpha = sp < 0.20 ? sp / 0.20 : Math.min(1, flicker); for (const f of _SCFG.flares) { const fbW = 1 + burstBase * (f.burstWScale ?? (f.burstScale ?? 1)); const fbL = 1 + burstBase * (f.burstScale ?? 1); drawEngineFlare(cx + f.xOff, flareBase + f.yOff, ft, f.size * fbW, (f.len ?? f.size) * fbL, (f.taper ?? 0.6), (f.shape ?? 'arch'), (f.wobble ?? 1), (f.col ?? null)); } ctx.restore();
+      if (_SCFG.flareSplitRow != null) drawBmp(ctx, _shipBmp, cx, cy, suCol, suGlow, PX, false, _sr);
     } else {
       const _launchBoost = (carrierState === 'leaving' && t - launchAt < LAUNCH_BOOST_DUR)
         ? Math.pow(1 - (t - launchAt) / LAUNCH_BOOST_DUR, 0.6) : 0;
@@ -1734,23 +1758,24 @@
         // Exhaust plume - wide downward blast cone below ship
         const _pl = _launchBoost * 95;
         const _pw = _launchBoost * 28;
-        const pg = ctx.createLinearGradient(cx, flareBase, cx, flareBase + _pl);
+        const _blastBase = flareBase + (_SCFG.launchBlastYOff ?? 0);
+        const _srcHW = _SCFG.launchBlastSourceHW ?? _pw * 0.3;
+        const pg = ctx.createLinearGradient(cx, _blastBase, cx, _blastBase + _pl);
         pg.addColorStop(0, `rgba(160,200,255,${(_launchBoost * 0.75).toFixed(2)})`);
         pg.addColorStop(0.25, `rgba(100,150,255,${(_launchBoost * 0.45).toFixed(2)})`);
         pg.addColorStop(1, 'rgba(60,100,220,0)');
         ctx.fillStyle = pg;
         ctx.beginPath();
-        ctx.moveTo(cx - _pw * 0.3, flareBase);
-        ctx.quadraticCurveTo(cx - _pw, flareBase + _pl * 0.6, cx - _pw * 0.5, flareBase + _pl);
-        ctx.quadraticCurveTo(cx, flareBase + _pl * 1.05, cx + _pw * 0.5, flareBase + _pl);
-        ctx.quadraticCurveTo(cx + _pw, flareBase + _pl * 0.6, cx + _pw * 0.3, flareBase);
+        ctx.moveTo(cx - _srcHW, _blastBase);
+        ctx.quadraticCurveTo(cx - _pw, _blastBase + _pl * 0.6, cx - _pw * 0.5, _blastBase + _pl);
+        ctx.quadraticCurveTo(cx, _blastBase + _pl * 1.05, cx + _pw * 0.5, _blastBase + _pl);
+        ctx.quadraticCurveTo(cx + _pw, _blastBase + _pl * 0.6, cx + _srcHW, _blastBase);
         ctx.closePath(); ctx.fill();
       }
-      drawBmp(ctx, _shipBmp, cx, cy, _SCFG.color, _SCFG.glow, PX);
-      ctx.save();
-      ctx.globalAlpha = idleEngineAlpha;
-      for (const f of _SCFG.flares) { const fes = idleWScale * (1 + _launchBoost * 2.8 * (f.burstScale ?? 1)); drawEngineFlare(cx + f.xOff, flareBase + f.yOff, ft, f.size * idleWScale, (f.len ?? f.size) * fes, (f.taper ?? 0.6), (f.shape ?? 'arch'), (f.wobble ?? 1), (f.col ?? null)); }
-      ctx.restore();
+      const _sr = _SCFG.flareSplitRow ?? bmpH(_shipBmp);
+      drawBmp(ctx, _shipBmp, cx, cy, _SCFG.color, _SCFG.glow, PX, false, 0, _sr);
+      ctx.save(); ctx.globalAlpha = idleEngineAlpha; for (const f of _SCFG.flares) { const fes = idleWScale * (1 + _launchBoost * 2.8 * (f.burstScale ?? 1)); drawEngineFlare(cx + f.xOff, flareBase + f.yOff, ft, f.size * idleWScale, (f.len ?? f.size) * fes, (f.taper ?? 0.6), (f.shape ?? 'arch'), (f.wobble ?? 1), (f.col ?? null)); } ctx.restore();
+      if (_SCFG.flareSplitRow != null) drawBmp(ctx, _shipBmp, cx, cy, _SCFG.color, _SCFG.glow, PX, false, _sr);
     }
 
     // ── Ship easter-egg speech bubble ──────────────────────────
@@ -2122,7 +2147,7 @@
     if (gravityState === 'updating') {
       const p = (0.65 + 0.35 * Math.sin(t * 0.008)).toFixed(2);
       arrowCol = `rgba(255,190,50,${p})`; arrowGlw = 'rgba(255,190,50,0.35)';
-      drawBmp(ctx, ARROW_DOWN_BMP, _aX, _aY + Math.round(Math.max(0, Math.sin(t * 0.005)) * 2), arrowCol, arrowGlw, ARROW_PX);
+      drawBmp(ctx, ARROW_DOWN_BMP, _aX, _aY + Math.round(Math.max(0, Math.sin(t * 0.005)) * 3), arrowCol, arrowGlw, ARROW_PX);
     } else {
       if (gravityState === 'done') {
         const flash = Math.max(0, 1 - (t - gravityDoneAt) / 1200);
@@ -2135,7 +2160,7 @@
 
     // ── SHIPS / OPTIONS ────────────────────────────────────
     const _canSelectShip = blockingEnabled === true && shipPowerState === 'up' && warpState === 'none';
-    const _shipLabels = { protector: 'PROTECTOR', falcon: 'FALCON', swordfish: 'SWORDFISH', enterprise: 'ENTERPRISE', serenity: 'SERENITY', normandy: 'NORMANDY', pes: 'PES', inbound: 'MISSINGNO' };
+    const _shipLabels = { protector: 'PROTECTOR', falcon: 'FALCON', swordfish: 'SWORDFISH', enterprise: 'ENTERPRISE', serenity: 'SERENITY', normandy: 'NORMANDY', pes: 'PES', inbound: 'MISSINGNO.' };
     if (OPT_W > 0) {
       ctx.save();
       ctx.beginPath(); ctx.rect(OPT_X, SY, OPT_W, SH); ctx.clip();
@@ -2339,8 +2364,7 @@
         carrierRestY = H * 0.78;
         carrierY = carrierRestY;
         carrierState = 'present';
-        { const _bi = CARRIER_SHIP_ORDER.indexOf(currentShip); shipX = W * 0.40 + (_bi >= 0 ? CARRIER_BAY_DX[_bi] : 0); }
-        shipY = carrierRestY;
+        { const _bi = CARRIER_SHIP_ORDER.indexOf(currentShip); shipX = W * 0.40 + (_bi >= 0 ? CARRIER_BAY_DX[_bi] : 0); shipY = carrierRestY + (_bi >= 0 ? CARRIER_BAY_DY[_bi] : 0); }
         _firstEnterFetch = false;
       } else {
         sessionStorage.removeItem('ph_block_timer');
@@ -2373,8 +2397,7 @@
               carrierRestY = H * 0.78;
               carrierY = carrierRestY;
               carrierState = 'present';
-              { const _bi = CARRIER_SHIP_ORDER.indexOf(currentShip); shipX = W * 0.40 + (_bi >= 0 ? CARRIER_BAY_DX[_bi] : 0); }
-              shipY = carrierRestY;
+              { const _bi = CARRIER_SHIP_ORDER.indexOf(currentShip); shipX = W * 0.40 + (_bi >= 0 ? CARRIER_BAY_DX[_bi] : 0); shipY = carrierRestY + (_bi >= 0 ? CARRIER_BAY_DY[_bi] : 0); }
             } else if (!_wasFirst && shipPowerState === 'up') {
               shipPowerState = 'down';
               if (shipQuote) shipQuote.shownAt = performance.now() - 3000;

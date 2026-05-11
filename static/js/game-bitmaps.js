@@ -254,17 +254,13 @@ const ENTERPRISE_BMP = [
   [0,1,1,0,0,1,1,1,0,0,1,1,0],  // r19
   [0,1,1,0,0,0,1,0,0,0,1,1,0],  // r20
   [0,1,1,0,0,0,0,0,0,0,1,1,0],  // r21
-  [0,1,1,0,0,0,0,0,0,0,1,1,0],  // r21
-  [0,1,1,0,0,0,0,0,0,0,1,1,0],  // r21
   [0,1,1,0,0,0,0,0,0,0,1,1,0],  // r22
   [0,1,1,0,0,0,0,0,0,0,1,1,0],  // r23
-  [0,0,1,0,0,0,0,0,0,0,1,0,0],  // r24
+  [0,1,1,0,0,0,0,0,0,0,1,1,0],  // r24
+  [0,1,1,0,0,0,0,0,0,0,1,1,0],  // r25
+  [0,0,1,0,0,0,0,0,0,0,1,0,0],  // r26
 ];
 const ENT_GUN_L = 3, ENT_GUN_R = 9, ENT_GUN_ROW = 1;
-
-// ── New ships (placeholder art 17×17) ───────────────────────────────────
-// Replace each bitmap with actual art, add ship-specific GUN constants,
-// and add a case in shipGunTipPos below.
 
 const SERENITY_BMP = [
   [0,0,0,0,0,0,0,1,0,0,0,0,0,0,0],  // r0
@@ -289,6 +285,8 @@ const SERENITY_BMP = [
   [0,0,0,0,0,0,1,0,1,0,0,0,0,0,0],  // r19
 ];
 const SERENITY_GUN_L = 5, SERENITY_GUN_R = 9, SERENITY_GUN_ROW = 8;
+
+const NORMANDY_GUN_L = 3, NORMANDY_GUN_R = 9, NORMANDY_GUN_ROW = 9;
 
 const NORMANDY_BMP = [
   [0,0,0,0,0,0,1,0,0,0,0,0,0],  // r0
@@ -315,6 +313,8 @@ const NORMANDY_BMP = [
   [0,0,0,1,1,0,0,0,1,1,0,0,0],  // r21
 ];
 
+const PES_GUN_L = 5, PES_GUN_R = 9, PES_GUN_ROW = 2;
+
 const PES_BMP = [
   [0,0,0,0,0,0,1,1,1,0,0,0,0,0,0],  // r0
   [0,0,0,0,0,1,1,1,1,1,0,0,0,0,0],  // r1
@@ -322,32 +322,34 @@ const PES_BMP = [
   [0,0,0,0,1,1,1,1,1,1,1,0,0,0,0],  // r3
   [0,0,0,1,1,1,1,1,1,1,1,1,0,0,0],  // r4
   [0,0,0,1,1,1,1,1,1,1,1,1,0,0,0],  // r5
-  [0,0,0,1,1,1,1,1,1,1,1,1,0,0,0],  // r5
-  [0,0,0,1,1,1,1,1,1,1,1,1,0,0,0],  // r5
   [0,0,0,1,1,1,1,1,1,1,1,1,0,0,0],  // r6
   [0,0,0,1,1,1,1,1,1,1,1,1,0,0,0],  // r7
   [0,0,0,1,1,1,1,1,1,1,1,1,0,0,0],  // r8
   [0,0,0,1,1,1,1,1,1,1,1,1,0,0,0],  // r9
-  [0,0,0,0,1,1,1,1,1,1,1,0,0,0,0],  // r10
-  [0,0,0,0,1,1,1,1,1,1,1,0,0,0,0],  // r11
+  [0,0,0,1,1,1,1,1,1,1,1,1,0,0,0],  // r10
+  [0,0,0,1,1,1,1,1,1,1,1,1,0,0,0],  // r11
   [0,0,0,0,1,1,1,1,1,1,1,0,0,0,0],  // r12
-  [0,0,0,1,1,1,1,1,1,1,1,1,0,0,0],  // r13
-  [0,1,1,1,1,1,1,1,1,1,1,1,1,1,0],  // r14
-  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],  // r15
-  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],  // r16
+  [0,0,0,0,1,1,1,1,1,1,1,0,0,0,0],  // r13
+  [0,0,0,0,1,1,1,1,1,1,1,0,0,0,0],  // r14
+  [0,0,0,1,1,1,1,1,1,1,1,1,0,0,0],  // r15
+  [0,1,1,1,1,1,1,1,1,1,1,1,1,1,0],  // r16
   [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],  // r17
-  [1,1,1,0,0,0,1,1,1,0,0,0,1,1,1],  // r18
-  [0,1,1,0,0,0,1,1,1,0,0,0,1,1,0],  // r19
-  [0,1,1,0,0,0,0,1,0,0,0,0,1,1,0],  // r20
-  [0,1,1,0,0,0,0,1,0,0,0,0,1,1,0],  // r21
-  [0,0,1,0,0,0,0,1,0,0,0,0,1,0,0],  // r22
-  [0,0,1,0,0,0,0,1,0,0,0,0,1,0,0],  // r23
-  [0,0,0,0,0,0,0,1,0,0,0,0,0,0,0],  // r24
-  [0,0,0,0,0,0,0,1,0,0,0,0,0,0,0],  // r25
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],  // r18
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],  // r19
+  [1,1,1,0,0,0,1,1,1,0,0,0,1,1,1],  // r20
+  [0,1,1,0,0,0,1,1,1,0,0,0,1,1,0],  // r21
+  [0,1,1,0,0,0,0,1,0,0,0,0,1,1,0],  // r22
+  [0,1,1,0,0,0,0,1,0,0,0,0,1,1,0],  // r23
+  [0,0,1,0,0,0,0,1,0,0,0,0,1,0,0],  // r24
+  [0,0,1,0,0,0,0,1,0,0,0,0,1,0,0],  // r25
   [0,0,0,0,0,0,0,1,0,0,0,0,0,0,0],  // r26
   [0,0,0,0,0,0,0,1,0,0,0,0,0,0,0],  // r27
-  [0,0,0,0,0,0,0,1,0,0,0,0,0,0,0],  // r27
+  [0,0,0,0,0,0,0,1,0,0,0,0,0,0,0],  // r28
+  [0,0,0,0,0,0,0,1,0,0,0,0,0,0,0],  // r29
+  [0,0,0,0,0,0,0,1,0,0,0,0,0,0,0],  // r30
 ];
+
+const INBOUND_GUN_L = 6, INBOUND_GUN_R = 10, INBOUND_GUN_ROW = 2;
 
 const INBOUND_BMP = [
   [0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0],  // r0
@@ -395,8 +397,8 @@ function shipGunTipPos(ship, cx, cy) {
     const ox = cx - bmpW(NORMANDY_BMP) * PX / 2;
     const oy = cy - bmpH(NORMANDY_BMP) * PX / 2;
     const half = (PX - 1) / 2;
-    return { lx: ox + 3 * PX + half, rx: ox + 9 * PX + half,
-              nx: ox + 6 * PX + half, gy: oy + 9 * PX + half, ny: oy + 9 * PX + half };
+    return { lx: ox + NORMANDY_GUN_L * PX + half, rx: ox + NORMANDY_GUN_R * PX + half,
+              nx: ox + 6 * PX + half, gy: oy + NORMANDY_GUN_ROW * PX + half, ny: oy + NORMANDY_GUN_ROW * PX + half };
   }
   if (ship === 'serenity') {
     const ox = cx - bmpW(SERENITY_BMP) * PX / 2;
@@ -405,16 +407,19 @@ function shipGunTipPos(ship, cx, cy) {
     return { lx: ox + SERENITY_GUN_L * PX + half, rx: ox + SERENITY_GUN_R * PX + half,
               nx: ox + 7 * PX + half, gy: oy + SERENITY_GUN_ROW * PX + half, ny: oy + half };
   }
-  // Placeholder fallback for new ships: symmetric guns at row 2, ±2 cols from center
-  const _newBmps = { pes: PES_BMP, inbound: INBOUND_BMP };
-  if (_newBmps[ship]) {
-    const bmp = _newBmps[ship];
-    const ox = cx - bmpW(bmp) * PX / 2;
-    const oy = cy - bmpH(bmp) * PX / 2;
+  if (ship === 'pes') {
+    const ox = cx - bmpW(PES_BMP) * PX / 2;
+    const oy = cy - bmpH(PES_BMP) * PX / 2;
     const half = (PX - 1) / 2;
-    const mid = Math.floor(bmpW(bmp) / 2);
-    return { lx: ox + (mid - 2) * PX + half, rx: ox + (mid + 2) * PX + half,
-              nx: ox + mid * PX + half, gy: oy + 2 * PX + half, ny: oy + half };
+    return { lx: ox + PES_GUN_L * PX + half, rx: ox + PES_GUN_R * PX + half,
+              nx: ox + 7 * PX + half, gy: oy + PES_GUN_ROW * PX + half, ny: oy + half };
+  }
+  if (ship === 'inbound') {
+    const ox = cx - bmpW(INBOUND_BMP) * PX / 2;
+    const oy = cy - bmpH(INBOUND_BMP) * PX / 2;
+    const half = (PX - 1) / 2;
+    return { lx: ox + INBOUND_GUN_L * PX + half, rx: ox + INBOUND_GUN_R * PX + half,
+              nx: ox + 8 * PX + half, gy: oy + INBOUND_GUN_ROW * PX + half, ny: oy + half };
   }
   return gunTipPos(cx, cy);
 }
@@ -472,6 +477,22 @@ const CARRIER_BMP = [
   [1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
   [1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
   [1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
+  [1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1],
+  [1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1],
+  [1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
+  [1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
+  [1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
+  [1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
+  [1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
+  [1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
+  [1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
+  [1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
+  [1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
+  [1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
+  [1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
+  [1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
+  [1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
+  [1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
   [1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
   [1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
   [0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0],
@@ -480,32 +501,41 @@ const CARRIER_BMP = [
 ];
 const CARRIER_PX = 6; // drawn larger than other sprites
 
-// Perimeter light offsets (screen pixels from carrier center, at CARRIER_PX=6, 75×24 bitmap)
-// dx = col*6-222, dy = row*6-69
+// Perimeter light offsets (screen pixels from carrier center, at CARRIER_PX=6, 75×40 bitmap)
+// dx = col*6-222, dy = row*6-117
 const CARRIER_LIGHT_OFFSETS = [
-  { dx: -222, dy:  -3 }, // port tip (col 0, row 11)
-  { dx: -222, dy: -51 }, // port top corner (col 0, row 3)
-  { dx: -162, dy: -69 }, // top-deck far-left (col 10, row 0)
-  { dx:  -72, dy: -69 }, // top-deck left (col 25, row 0)
-  { dx:    0, dy: -69 }, // top-deck center (col 37, row 0)
-  { dx:   78, dy: -69 }, // top-deck right (col 50, row 0)
-  { dx:  162, dy: -69 }, // top-deck far-right (col 64, row 0)
-  { dx:  222, dy: -51 }, // starboard top corner (col 74, row 3)
-  { dx:  222, dy:  -3 }, // starboard tip (col 74, row 11)
-  { dx:  222, dy:  51 }, // starboard bottom corner (col 74, row 20)
-  { dx:  162, dy:  69 }, // bottom-deck far-right (col 64, row 23)
-  { dx:   78, dy:  69 }, // bottom-deck right (col 50, row 23)
-  { dx:    0, dy:  69 }, // bottom-deck center (col 37, row 23)
-  { dx:  -72, dy:  69 }, // bottom-deck left (col 25, row 23)
-  { dx: -162, dy:  69 }, // bottom-deck far-left (col 10, row 23)
-  { dx: -222, dy:  51 }, // port bottom corner (col 0, row 20)
+  { dx: -222, dy:   3 }, // port tip (col 0, row 20)
+  { dx: -222, dy: -99 }, // port top corner (col 0, row 3)
+  { dx: -162, dy: -117 }, // top-deck far-left (col 10, row 0)
+  { dx:  -72, dy: -117 }, // top-deck left (col 25, row 0)
+  { dx:    0, dy: -117 }, // top-deck center (col 37, row 0)
+  { dx:   78, dy: -117 }, // top-deck right (col 50, row 0)
+  { dx:  162, dy: -117 }, // top-deck far-right (col 64, row 0)
+  { dx:  222, dy: -99 }, // starboard top corner (col 74, row 3)
+  { dx:  222, dy:   3 }, // starboard tip (col 74, row 20)
+  { dx:  222, dy:  99 }, // starboard bottom corner (col 74, row 36)
+  { dx:  162, dy: 117 }, // bottom-deck far-right (col 64, row 39)
+  { dx:   78, dy: 117 }, // bottom-deck right (col 50, row 39)
+  { dx:    0, dy: 117 }, // bottom-deck center (col 37, row 39)
+  { dx:  -72, dy: 117 }, // bottom-deck left (col 25, row 39)
+  { dx: -162, dy: 117 }, // bottom-deck far-left (col 10, row 39)
+  { dx: -222, dy:  99 }, // port bottom corner (col 0, row 36)
 ];
 
-// Bay assignment - ship order and X offsets relative to carrier center (screen pixels)
-const CARRIER_SHIP_ORDER = ['protector', 'falcon', 'swordfish', 'enterprise'];
-const CARRIER_BAY_DX = [-135, -45, 45, 135];
+// Bay assignment - 2×4 grid (4 cols × 2 rows), 8th slot empty
+// Row 1 (DY=-54): enterprise, falcon, normandy, pes
+// Row 2 (DY=+54): protector, serenity, swordfish, [empty]
+const CARRIER_SHIP_ORDER = ['enterprise', 'falcon', 'normandy', 'pes', 'protector', 'serenity', 'swordfish'];
+const CARRIER_BAY_DX = [-135, -45, 45, 135, -135, -45, 45];
+const CARRIER_BAY_DY = [-42, -42, -42, -42, 42, 42, 42];
+// Fuel bump positions per bay (screen px from carrier center, at CARRIER_PX=6)
+// Row 1 left pair  → port side bump   (cols 0-2, rows 20-21): dx=-216, dy=6
+// Row 1 right pair → starboard bump   (cols 72-74, rows 20-21): dx=+216, dy=6
+// Row 2 each ship  → bottom bump directly below (row 38): dx matches bay, dy=111
+const CARRIER_BUMP_DX = [-204, -204, 204, 204, -135, -45, 45];
+const CARRIER_BUMP_DY = [   6,    6,   6,   6,  111, 111, 111];
 
-function drawBmp(ctx, bmp, cx, cy, color, glowColor, px, solid = false) {
+function drawBmp(ctx, bmp, cx, cy, color, glowColor, px, solid = false, rowFrom = 0, rowTo = Infinity) {
   const cols = bmpW(bmp), rows = bmpH(bmp);
   const ox = Math.round(cx - (cols * px) / 2);
   const oy = Math.round(cy - (rows * px) / 2);
@@ -515,7 +545,7 @@ function drawBmp(ctx, bmp, cx, cy, color, glowColor, px, solid = false) {
     ctx.shadowBlur = 4;
   }
   const size = solid ? px - 2 : px - 1;
-  for (let r = 0; r < rows; r++) {
+  for (let r = rowFrom; r < Math.min(rows, rowTo); r++) {
     for (let c = 0; c < cols; c++) {
       if (bmp[r][c]) ctx.fillRect(ox + c * px, oy + r * px, size, size);
     }
