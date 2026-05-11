@@ -173,7 +173,7 @@ A strip across the bottom, divided into four panels:
 
 **SHIPS:** active ship name. Click to open the ship selector.
 
-<img width="1453" height="104" alt="image" src="https://github.com/user-attachments/assets/9d2b74cf-76e8-46e3-bd62-4bef9ca47e2d" />
+<img width="370" height="176" alt="ships" src="https://github.com/user-attachments/assets/2970a064-4f00-4add-b71a-caeab1a60b90" />
 
 A hamburger button at the left edge of the HUD opens the **Settings** panel, which includes:
 
