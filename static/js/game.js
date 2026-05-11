@@ -76,7 +76,7 @@
   function _saveDisplaySettings() {
     try { localStorage.setItem('ph_display', JSON.stringify({ friendlies: showFriendlies, domain: showDomain, client: showClient })); } catch {}
   }
-  let currentShip = 'protector';  // 'protector' | 'falcon' | 'swordfish' | 'enterprise'
+  let currentShip = 'protector';  // 'protector'|'falcon'|'swordfish'|'enterprise'|'serenity'|'normandy'|'pes'
   let warpState = 'none';         // 'none' | 'out' | 'in'
   let warpAt = 0;
   let warpNextShip = null;
@@ -99,6 +99,10 @@
     falcon:     ["Never tell me the odds!", "I'd just as soon kiss a Wookiee.", "BUT SIR!!", "I am a Jedi, like my father before me.", "I can fly anything.", "It's not my fault!", "Shut him up or shut him down!"],
     swordfish:  ["Bang.", "Whatever happens, happens.", "I'm not going there to die. I'm going to find out if I'm really alive.", "I'm not a bounty hunter for the money.", "I love a man who can cook.", "Ed and Ein are hungry!"],
     enterprise: ["THERE ARE FOUR LIGHTS!", "Good tea, nice house.", "Shaka, when the walls fell.", "Will you.. Please... Sit down?", "Live long and prosper.", "The needs of the many outweigh the needs of the few, or the one.", "He's dead, Jim.", "Risk is our business.", "Fascinating."],
+    serenity:   ["Time for some thrilling heroics."],
+    normandy:   ["Just because I like you doesn't mean I won't kill you."],
+    pes:        ["Good news everyone!"],
+    inbound:    ["[coming soon.]"],
   };
   const DISABLE_OPTIONS = [
     { label: '10 SEC', timer: 10,  ms: 10000 },
@@ -107,24 +111,24 @@
     { label: 'DISABLE',   timer: null, ms: 0 },
   ];
   // Draws one nacelle engine exhaust flame centered at (x, base).
-  function drawEngineFlare(x, base, ft, wScale = 1, lScale = wScale, taper = 0.6, shape = 'arch', wobble = 1) {
+  function drawEngineFlare(x, base, ft, wScale = 1, lScale = wScale, taper = 0.6, shape = 'arch', wobble = 1, col = null) {
+    const fire = col === 'fire';
     const l = (21 + 2 * Math.sin(ft * 1.9) + 1.5 * Math.sin(ft * 3.1 + 0.7)) * lScale;
     const fw = (3.5 + 0.4 * wobble * Math.sin(ft * 2.7 + 0.3)) * wScale;
     const og = ctx.createRadialGradient(x, base + l * 0.3, 0, x, base + l * 0.3, l * 0.7);
-    og.addColorStop(0, 'rgba(80,140,255,0.22)');
-    og.addColorStop(1, 'rgba(40,80,255,0)');
+    og.addColorStop(0, fire ? 'rgba(255,100,30,0.22)' : 'rgba(80,140,255,0.22)');
+    og.addColorStop(1, fire ? 'rgba(180,30,0,0)'      : 'rgba(40,80,255,0)');
     ctx.fillStyle = og;
     ctx.beginPath(); ctx.ellipse(x, base + l * 0.3, l * 0.35, l * 0.7, 0, 0, Math.PI * 2); ctx.fill();
     const fg = ctx.createLinearGradient(x, base, x, base + l);
-    fg.addColorStop(0, 'rgba(150,200,255,0)');
-    fg.addColorStop(0.12, 'rgba(150,200,255,0.70)');
-    fg.addColorStop(0.4, 'rgba(70,120,255,0.55)');
-    fg.addColorStop(1, 'rgba(40,80,255,0)');
+    fg.addColorStop(0,    fire ? 'rgba(255,160,80,0)'    : 'rgba(150,200,255,0)');
+    fg.addColorStop(0.12, fire ? 'rgba(255,160,80,0.70)' : 'rgba(150,200,255,0.70)');
+    fg.addColorStop(0.4,  fire ? 'rgba(220,80,20,0.55)'  : 'rgba(70,120,255,0.55)');
+    fg.addColorStop(1,    fire ? 'rgba(180,30,0,0)'       : 'rgba(40,80,255,0)');
     ctx.fillStyle = fg;
-    ctx.shadowColor = 'rgba(80,140,255,0.3)'; ctx.shadowBlur = 8;
+    ctx.shadowColor = fire ? 'rgba(255,100,30,0.3)' : 'rgba(80,140,255,0.3)'; ctx.shadowBlur = 8;
     ctx.beginPath();
     if (shape === 'column') {
-      // Straight sides, rounded tip
       ctx.moveTo(x - fw, base);
       ctx.lineTo(x - fw * taper, base + l * 0.72);
       ctx.quadraticCurveTo(x, base + l, x + fw * taper, base + l * 0.72);
@@ -136,9 +140,9 @@
     }
     ctx.closePath(); ctx.fill(); ctx.shadowBlur = 0;
     const ig = ctx.createLinearGradient(x, base, x, base + l * 0.5);
-    ig.addColorStop(0, 'rgba(210,235,255,0)');
-    ig.addColorStop(0.15, 'rgba(210,235,255,0.90)');
-    ig.addColorStop(1, 'rgba(160,205,255,0)');
+    ig.addColorStop(0,    fire ? 'rgba(255,235,200,0)'    : 'rgba(210,235,255,0)');
+    ig.addColorStop(0.15, fire ? 'rgba(255,235,200,0.90)' : 'rgba(210,235,255,0.90)');
+    ig.addColorStop(1,    fire ? 'rgba(255,180,100,0)'    : 'rgba(160,205,255,0)');
     ctx.fillStyle = ig;
     ctx.beginPath();
     ctx.moveTo(x - fw * 0.3, base);
@@ -430,7 +434,8 @@
     const idleDrift = idleBlend * 26 * Math.sin(t * 0.00021);
     const targeted = entities.find(e => e.state === 'targeted');
     const _carrierCX = W * 0.40;
-    const _activeBayX = _carrierCX + CARRIER_BAY_DX[CARRIER_SHIP_ORDER.indexOf(currentShip)];
+    const _shipBayIdx = CARRIER_SHIP_ORDER.indexOf(currentShip);
+    const _activeBayX = _carrierCX + (_shipBayIdx >= 0 ? CARRIER_BAY_DX[_shipBayIdx] : 0);
     let goalX, goalXLerp;
     if (carrierState === 'arriving' || carrierState === 'present') {
       goalX = _activeBayX; goalXLerp = 0.002;
@@ -509,7 +514,7 @@
           const mdist = Math.hypot(mdx, mdy) || 1;
           const mspd = 1.1;
           droneMissiles.push({ x: msx, y: msy, vx: mdx/mdist*mspd, vy: mdy/mdist*mspd,
-                              tx: tgt.x, ty: tgt.y, born: t, dur: mdist/mspd,
+                              tx: tgt.x, ty: tgt.y, born: t, dur: mdist/mspd, spd: mspd,
                               target: tgt, exploded: false, explodeAt: 0 });
           drone.lastFire = t;
         }
@@ -576,7 +581,7 @@
           const mdist = Math.hypot(mdx, mdy) || 1;
           const mspd = 1.1;
           drone2Missiles.push({ x: msx, y: msy, vx: mdx/mdist*mspd, vy: mdy/mdist*mspd,
-                                 tx: tgt.x, ty: tgt.y, born: t, dur: mdist/mspd,
+                                 tx: tgt.x, ty: tgt.y, born: t, dur: mdist/mspd, spd: mspd,
                                  target: tgt, exploded: false, explodeAt: 0 });
           drone2.lastFire = t;
         }
@@ -599,10 +604,11 @@
         if (t - m.explodeAt > 700) droneMissiles.splice(i, 1);
         continue;
       }
-      m.x += m.vx * dt; m.y += m.vy * dt;
       const _tgt = m.target && m.target.state !== 'shot' && m.target.x >= 0 && m.target.x <= W && m.target.y >= 0 && m.target.y <= H ? m.target : null;
       const _htx = _tgt ? _tgt.x : m.tx;
       const _hty = _tgt ? _tgt.y : m.ty;
+      if (_tgt) { const _hd = Math.hypot(_htx - m.x, _hty - m.y) || 1; m.vx = (_htx - m.x) / _hd * m.spd; m.vy = (_hty - m.y) / _hd * m.spd; }
+      m.x += m.vx * dt; m.y += m.vy * dt;
       if (Math.hypot(m.x - _htx, m.y - _hty) < 20 || t - m.born > m.dur + 150) {
         m.exploded = true; m.explodeAt = t;
         if (m.target && m.target.state !== 'shot') {
@@ -630,10 +636,11 @@
         if (t - m.explodeAt > 700) drone2Missiles.splice(i, 1);
         continue;
       }
-      m.x += m.vx * dt; m.y += m.vy * dt;
       const _tgt2 = m.target && m.target.state !== 'shot' && m.target.x >= 0 && m.target.x <= W && m.target.y >= 0 && m.target.y <= H ? m.target : null;
       const _htx2 = _tgt2 ? _tgt2.x : m.tx;
       const _hty2 = _tgt2 ? _tgt2.y : m.ty;
+      if (_tgt2) { const _hd2 = Math.hypot(_htx2 - m.x, _hty2 - m.y) || 1; m.vx = (_htx2 - m.x) / _hd2 * m.spd; m.vy = (_hty2 - m.y) / _hd2 * m.spd; }
+      m.x += m.vx * dt; m.y += m.vy * dt;
       if (Math.hypot(m.x - _htx2, m.y - _hty2) < 20 || t - m.born > m.dur + 150) {
         m.exploded = true; m.explodeAt = t;
         if (m.target && m.target.state !== 'shot') {
@@ -795,9 +802,17 @@
     falcon:     { bmp: FALCON_BMP,     color: 'rgba(195,208,240,0.95)', glow: 'rgba(170,190,235,0.45)', dimColor: 'rgba(195,208,240,0.22)',
                   flares: [{ xOff: -3, yOff: 1, size: 3.2, len: 0.75, taper: 0.85, shape: 'column', wobble: 0.15, burstWScale: 0 }] },
     swordfish:  { bmp: SWORDFISH_BMP,  color: 'rgba(207,50,33,0.95)', glow: 'rgba(203,38,20,0.55)', dimColor: 'rgba(207,50,33,0.22)',
-                  flares: [{ xOff: 0, yOff: 6, size: 1.5, len: 1.0, burstWScale: 0 }] },
+                  flares: [{ xOff: 0, yOff: 5, size: 1.5, len: 1.0, burstWScale: 0 }] },
     enterprise: { bmp: ENTERPRISE_BMP, color: 'rgba(195,208,240,0.95)', glow: 'rgba(170,190,235,0.48)', dimColor: 'rgba(195,208,240,0.22)',
-                  flares: [{ xOff: -13, yOff: 0, size: 0.9, burstWScale: 0 }, { xOff: 13, yOff: 0, size: 0.9, burstWScale: 0 }, { xOff: 0, yOff: -34, size: 0.50, burstWScale: 0 }] },
+                  flares: [{ xOff: -13.5, yOff: 0, size: 0.9, burstWScale: 0 }, { xOff: 13.5, yOff: 0, size: 0.9, burstWScale: 0 }, { xOff: 0, yOff: -34, size: 0.50, burstWScale: 0, col: 'fire' }] },
+    serenity:   { bmp: SERENITY_BMP,   color: 'rgba(195,208,240,0.95)', glow: 'rgba(170,190,235,0.55)', dimColor: 'rgba(195,208,240,0.22)',
+                  flares: [{ xOff: -19.5, yOff: -17, size: 1, burstWScale: 0 }, { xOff: 19.5, yOff: -17, size: 1, burstWScale: 0 }] },
+    normandy:   { bmp: NORMANDY_BMP,   color: 'rgba(195,208,240,0.95)', glow: 'rgba(170,190,235,0.55)', dimColor: 'rgba(195,208,240,0.22)',
+                  flares: [{ xOff: -7.5, yOff: 4, size: 0.8, burstWScale: 0 }, { xOff: 7.5, yOff: 4, size: 0.8, burstWScale: 0 }, { xOff: -16.5, yOff: -2, size: 0.8, burstWScale: 0 }, { xOff: 16.5, yOff: -2, size: 0.8, burstWScale: 0 }] },
+    pes:        { bmp: PES_BMP,        color: 'rgba(89,223,139,0.95)', glow: 'rgba(89,223,139,0.55)', dimColor: 'rgba(89,223,139,0.22)',
+                  flares: [{ xOff: -10, yOff: 0, size: 1, burstWScale: 0 }, { xOff: 10, yOff: 0, size: 1, burstWScale: 0 }] },
+    inbound:    { bmp: INBOUND_BMP,    color: 'rgba(140,145,155,0.50)', glow: 'rgba(120,125,135,0.28)', dimColor: 'rgba(140,145,155,0.15)',
+                  flares: [] },
   };
 
   // ── Render ────────────────────────────────────────────────────────
@@ -946,8 +961,9 @@
           Math.hypot(c.x - _hatchX, c.y - _hatchY) > 5
         );
 
-        // Spawn crew to service the active ship
-        if (_crewEligible && t > crewNextSpawn && crewMembers.length < 3) {
+        // Spawn crew to service the active ship (skip if ship has no carrier bay yet)
+        if (_crewEligible && t > crewNextSpawn && crewMembers.length < 3 &&
+            CARRIER_SHIP_ORDER.indexOf(currentShip) >= 0) {
           const _hasFuel = crewMembers.some(c => c.type === 'fuel');
           const _fuelOk = !_hasFuel && t - lastFuelAt >= 300000;
           const _firstCrew = crewMembers.length === 0 && lastFuelAt === 0;
@@ -1247,7 +1263,7 @@
           if (e.type === 'blocked') {
             ctx.fillStyle = tier >= 3 ? 'rgba(200,100,255,1)' : tier === 2 ? 'rgba(255,160,60,1)' : 'rgba(255,120,100,1)';
           } else {
-            ctx.fillStyle = 'rgba(150,230,175,1)';
+            ctx.fillStyle = 'rgba(150,230,175,0.72)';
           }
           const dom = e.domain.length > 32 ? '…' + e.domain.slice(-30) : e.domain;
           ctx.fillText(dom, ex, domY);
@@ -1508,6 +1524,48 @@
       ctx.restore();
     }
 
+    // Muzzle flash and gun checks - drawn before ship so hull renders on top
+    if (warpState === 'none') {
+      for (const gl of lasers) {
+        const glAge = t - gl.born;
+        if (glAge < 0 || glAge >= 120) continue;
+        const fx = gl.style === 'seeker' ? gl.x0 : gl.side === 2 ? gtp.nx : gl.side === 1 ? gtp.rx : gtp.lx;
+        const fy = gl.style === 'seeker' ? gl.y0 : gl.side === 2 ? gtp.ny : gtp.gy;
+        const [fCol, fGlow] = gl.tier >= 3
+          ? ['rgba(255,220,70,0.9)',  'rgba(255,195,30,0.7)']
+          : gl.tier === 2
+          ? ['rgba(0,220,255,0.9)',   'rgba(0,200,255,0.7)']
+          : ['rgba(100,255,175,0.9)', 'rgba(100,255,175,0.7)'];
+        ctx.fillStyle = fCol;
+        ctx.shadowColor = fGlow;
+        ctx.shadowBlur = 10;
+        ctx.beginPath(); ctx.arc(fx, fy, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+      if (shipPowerState === 'startup' && gunCheckState > 0) {
+        const gtp2 = shipGunTipPos(currentShip, cx, cy);
+        for (let gi = 0; gi < 2; gi++) {
+          if (gunCheckState <= gi) continue;
+          const age = t - gunCheckFiredAt[gi];
+          if (age < 0 || age > GUN_CHECK_DUR) continue;
+          const a = Math.max(0, 1 - age / GUN_CHECK_DUR);
+          const gx = gi === 0 ? gtp2.lx : gtp2.rx;
+          const r = 4 + 8 * (1 - a);
+          ctx.save();
+          ctx.globalAlpha = a * 0.9;
+          ctx.strokeStyle = 'rgba(100,255,175,1)';
+          ctx.lineWidth = 1.5;
+          ctx.shadowColor = 'rgba(80,255,160,0.8)';
+          ctx.shadowBlur = 14;
+          ctx.beginPath(); ctx.arc(gx, gtp2.gy, r, 0, Math.PI * 2); ctx.stroke();
+          ctx.fillStyle = 'rgba(180,255,220,0.95)';
+          ctx.shadowBlur = 6;
+          ctx.beginPath(); ctx.arc(gx, gtp2.gy, 2.5, 0, Math.PI * 2); ctx.fill();
+          ctx.restore();
+        }
+      }
+    }
+
     // Ship config for current selection
     const _SCFG = _SHIP_CONFIGS[currentShip];
     const _shipBmp = _SCFG.bmp;
@@ -1650,7 +1708,7 @@
       drawBmp(ctx, _shipBmp, cx, cy, pdCol, pdGlow, PX);
       ctx.save();
       ctx.globalAlpha = Math.max(0, flicker * sp);
-      for (const f of _SCFG.flares) drawEngineFlare(cx + f.xOff, flareBase + f.yOff, ft, f.size, (f.len ?? f.size), (f.taper ?? 0.6), (f.shape ?? 'arch'), (f.wobble ?? 1));
+      for (const f of _SCFG.flares) drawEngineFlare(cx + f.xOff, flareBase + f.yOff, ft, f.size, (f.len ?? f.size), (f.taper ?? 0.6), (f.shape ?? 'arch'), (f.wobble ?? 1), (f.col ?? null));
       ctx.restore();
     } else if (shipPowerState === 'startup') {
       const sp = Math.min(1, (t - startupAt) / STARTUP_DUR);
@@ -1664,7 +1722,7 @@
       drawBmp(ctx, _shipBmp, cx, cy, suCol, suGlow, PX);
       ctx.save();
       ctx.globalAlpha = sp < 0.20 ? sp / 0.20 : Math.min(1, flicker);
-      for (const f of _SCFG.flares) { const fbW = 1 + burstBase * (f.burstWScale ?? (f.burstScale ?? 1)); const fbL = 1 + burstBase * (f.burstScale ?? 1); drawEngineFlare(cx + f.xOff, flareBase + f.yOff, ft, f.size * fbW, (f.len ?? f.size) * fbL, (f.taper ?? 0.6), (f.shape ?? 'arch'), (f.wobble ?? 1)); }
+      for (const f of _SCFG.flares) { const fbW = 1 + burstBase * (f.burstWScale ?? (f.burstScale ?? 1)); const fbL = 1 + burstBase * (f.burstScale ?? 1); drawEngineFlare(cx + f.xOff, flareBase + f.yOff, ft, f.size * fbW, (f.len ?? f.size) * fbL, (f.taper ?? 0.6), (f.shape ?? 'arch'), (f.wobble ?? 1), (f.col ?? null)); }
       ctx.restore();
     } else {
       const _launchBoost = (carrierState === 'leaving' && t - launchAt < LAUNCH_BOOST_DUR)
@@ -1690,50 +1748,8 @@
       drawBmp(ctx, _shipBmp, cx, cy, _SCFG.color, _SCFG.glow, PX);
       ctx.save();
       ctx.globalAlpha = idleEngineAlpha;
-      for (const f of _SCFG.flares) { const fes = idleWScale * (1 + _launchBoost * 2.8 * (f.burstScale ?? 1)); drawEngineFlare(cx + f.xOff, flareBase + f.yOff, ft, f.size * idleWScale, (f.len ?? f.size) * fes, (f.taper ?? 0.6), (f.shape ?? 'arch'), (f.wobble ?? 1)); }
+      for (const f of _SCFG.flares) { const fes = idleWScale * (1 + _launchBoost * 2.8 * (f.burstScale ?? 1)); drawEngineFlare(cx + f.xOff, flareBase + f.yOff, ft, f.size * idleWScale, (f.len ?? f.size) * fes, (f.taper ?? 0.6), (f.shape ?? 'arch'), (f.wobble ?? 1), (f.col ?? null)); }
       ctx.restore();
-    }
-
-    // Muzzle flash and gun checks - skip during warp
-    if (warpState === 'none') {
-      for (const gl of lasers) {
-        const glAge = t - gl.born;
-        if (glAge < 0 || glAge >= 120) continue;
-        const fx = gl.style === 'seeker' ? gl.x0 : gl.side === 2 ? gtp.nx : gl.side === 1 ? gtp.rx : gtp.lx;
-        const fy = gl.style === 'seeker' ? gl.y0 : gl.side === 2 ? gtp.ny : gtp.gy;
-        const [fCol, fGlow] = gl.tier >= 3
-          ? ['rgba(255,220,70,0.9)',  'rgba(255,195,30,0.7)']
-          : gl.tier === 2
-          ? ['rgba(0,220,255,0.9)',   'rgba(0,200,255,0.7)']
-          : ['rgba(100,255,175,0.9)', 'rgba(100,255,175,0.7)'];
-        ctx.fillStyle = fCol;
-        ctx.shadowColor = fGlow;
-        ctx.shadowBlur = 10;
-        ctx.beginPath(); ctx.arc(fx, fy, 3, 0, Math.PI * 2); ctx.fill();
-        ctx.shadowBlur = 0;
-      }
-      if (shipPowerState === 'startup' && gunCheckState > 0) {
-        const gtp2 = shipGunTipPos(currentShip, cx, cy);
-        for (let gi = 0; gi < 2; gi++) {
-          if (gunCheckState <= gi) continue;
-          const age = t - gunCheckFiredAt[gi];
-          if (age < 0 || age > GUN_CHECK_DUR) continue;
-          const a = Math.max(0, 1 - age / GUN_CHECK_DUR);
-          const gx = gi === 0 ? gtp2.lx : gtp2.rx;
-          const r = 4 + 8 * (1 - a);
-          ctx.save();
-          ctx.globalAlpha = a * 0.9;
-          ctx.strokeStyle = 'rgba(100,255,175,1)';
-          ctx.lineWidth = 1.5;
-          ctx.shadowColor = 'rgba(80,255,160,0.8)';
-          ctx.shadowBlur = 14;
-          ctx.beginPath(); ctx.arc(gx, gtp2.gy, r, 0, Math.PI * 2); ctx.stroke();
-          ctx.fillStyle = 'rgba(180,255,220,0.95)';
-          ctx.shadowBlur = 6;
-          ctx.beginPath(); ctx.arc(gx, gtp2.gy, 2.5, 0, Math.PI * 2); ctx.fill();
-          ctx.restore();
-        }
-      }
     }
 
     // ── Ship easter-egg speech bubble ──────────────────────────
@@ -1790,7 +1806,7 @@
 
     // Scaled fonts
     const _fs = W < 480 ? 0.75 : W < 660 ? 0.87 : 1;
-    const _fVal   = Math.max(9,  Math.round(15 * _fs));
+    const _fVal   = Math.max(9,  Math.round(16 * _fs));
     const _fSub   = Math.max(7,  Math.round(10 * _fs));
     const _fLabel = _fs < 1 ? 7 : 9;
     const _fShip  = Math.max(8,  Math.round(12 * _fs));
@@ -2118,7 +2134,7 @@
 
     // ── SHIPS / OPTIONS ────────────────────────────────────
     const _canSelectShip = blockingEnabled === true && shipPowerState === 'up' && warpState === 'none';
-    const _shipLabels = { protector: 'PROTECTOR', falcon: 'FALCON', swordfish: 'SWORDFISH', enterprise: 'ENTERPRISE' };
+    const _shipLabels = { protector: 'PROTECTOR', falcon: 'FALCON', swordfish: 'SWORDFISH', enterprise: 'ENTERPRISE', serenity: 'SERENITY', normandy: 'NORMANDY', pes: 'PES', inbound: 'MISSINGNO' };
     if (OPT_W > 0) {
       ctx.save();
       ctx.beginPath(); ctx.rect(OPT_X, SY, OPT_W, SH); ctx.clip();
@@ -2137,17 +2153,20 @@
     }
 
     // Ship selector popup - opens upward from OPTIONS
-    // Layout: 1×4 row on wide screens, 2×2 grid on compact screens
+    // Layout: 2×4 grid on wide screens, 4×2 grid on compact screens
     if (shipMenuOpen && _canSelectShip && OPT_W > 0) {
-      const _ships = ['protector', 'falcon', 'swordfish', 'enterprise'];
-      const _sBmps  = { protector: PROTECTOR_BMP, falcon: FALCON_BMP, swordfish: SWORDFISH_BMP, enterprise: ENTERPRISE_BMP };
-      const _sCols  = { protector: 'rgba(195,208,240,0.85)', falcon: 'rgba(195,208,240,0.85)', swordfish: 'rgba(207,50,33,0.85)', enterprise: 'rgba(195,208,240,0.85)' };
-      const _sGlows = { protector: 'rgba(170,190,235,0.32)', falcon: 'rgba(170,190,235,0.32)', swordfish: 'rgba(203,38,20,0.32)', enterprise: 'rgba(170,190,235,0.32)' };
-      const _grid2x2 = W < 660;
-      const _cols = _grid2x2 ? 2 : 4;
-      const _rows = _grid2x2 ? 2 : 1;
-      const _slotW = _grid2x2 ? 85 : 90;
-      const _slotH = _grid2x2 ? 82 : 96;
+      const _ships = ['enterprise', 'falcon', 'normandy', 'pes', 'protector', 'serenity', 'swordfish', 'inbound'];
+      const _sBmps  = { enterprise: ENTERPRISE_BMP, falcon: FALCON_BMP, normandy: NORMANDY_BMP, pes: PES_BMP,
+                        protector: PROTECTOR_BMP, serenity: SERENITY_BMP, swordfish: SWORDFISH_BMP, inbound: INBOUND_BMP };
+      const _sCols  = { enterprise: 'rgba(195,208,240,0.85)', falcon: 'rgba(195,208,240,0.85)', normandy: 'rgba(195,208,240,0.85)', pes: 'rgba(89,223,139,0.85)',
+                        protector: 'rgba(195,208,240,0.85)', serenity: 'rgba(195,208,240,0.85)', swordfish: 'rgba(207,50,33,0.85)', inbound: 'rgba(150,155,165,0.85)' };
+      const _sGlows = { enterprise: 'rgba(170,190,235,0.32)', falcon: 'rgba(170,190,235,0.32)', normandy: 'rgba(170,190,235,0.32)', pes: 'rgba(89,223,139,0.32)',
+                        protector: 'rgba(170,190,235,0.32)', serenity: 'rgba(170,190,235,0.32)', swordfish: 'rgba(203,38,20,0.32)', inbound: null };
+      const _compact = W < 660;
+      const _cols = _compact ? 2 : 4;
+      const _rows = _compact ? 4 : 2;
+      const _slotW = _compact ? 85 : 90;
+      const _slotH = _compact ? 70 : 82;
       const _mPad = 10;
       const _mw = _cols * _slotW + _mPad * 2;
       const _mh = _rows * _slotH + _mPad * 2;
@@ -2174,25 +2193,22 @@
         const _sY  = _mY + _mPad + _row * _slotH;
         const _sCX = _sX + _slotW / 2;
         const _isActive = s === currentShip;
-        // 1×4: hitbox spans the full menu height per column (original behaviour)
-        // 2×2: hitbox is per cell
-        const hb = _grid2x2
-          ? { x: _sX, y: _sY, w: _slotW, h: _slotH }
-          : { x: _sX, y: _mY, w: _slotW, h: _mh };
-        const _shipCY = _grid2x2 ? _sY + _slotH / 2 - 10 : _mY + _mh / 2 - 10;
-        const _labelY = _grid2x2 ? _sY + _slotH - 11      : _mY + _mh - 11;
-        const hov = !_anyHov && !_isActive && mouseX >= hb.x && mouseX < hb.x + hb.w && mouseY >= hb.y && mouseY < hb.y + hb.h;
+        const _isLocked = s === 'inbound';
+        const hb = { x: _sX, y: _sY, w: _slotW, h: _slotH };
+        const _shipCY = _sY + _slotH / 2 - 8;
+        const _labelY = _sY + _slotH - 11;
+        const hov = !_anyHov && !_isActive && !_isLocked && mouseX >= hb.x && mouseX < hb.x + hb.w && mouseY >= hb.y && mouseY < hb.y + hb.h;
         if (hov) _anyHov = true;
         if (hov) { ctx.fillStyle = 'rgba(140,160,175,0.08)'; ctx.fillRect(hb.x, hb.y, hb.w, hb.h); }
         ctx.save();
-        ctx.globalAlpha = _isActive ? 0.28 : (hov ? 1.0 : 0.70);
+        ctx.globalAlpha = _isLocked ? 0.60 : (_isActive ? 0.28 : (hov ? 1.0 : 0.70));
         drawBmp(ctx, _sBmps[s], _sCX, _shipCY, _sCols[s], hov ? _sGlows[s] : null, 2);
         ctx.restore();
         ctx.textAlign = 'center';
         ctx.font = '7px "Press Start 2P", monospace';
-        ctx.fillStyle = _isActive ? 'rgba(80,80,80,0.50)' : hov ? 'rgba(215,225,248,0.95)' : 'rgba(175,200,238,0.65)';
+        ctx.fillStyle = _isLocked ? 'rgba(130,135,145,0.70)' : _isActive ? 'rgba(80,80,80,0.50)' : hov ? 'rgba(215,225,248,0.95)' : 'rgba(175,200,238,0.65)';
         ctx.fillText(_isActive ? 'ACTIVE' : _shipLabels[s], _sCX, _labelY);
-        return { ship: s, hitbox: hb, active: _isActive };
+        return { ship: s, hitbox: hb, active: _isActive, locked: _isLocked };
       });
     } else {
       shipMenuItems = [];
@@ -2282,7 +2298,7 @@
     shipMenuOpen = false; shipMenuItems = []; shipMenuHovered = false;
     settingsMenuOpen = false; settingsMenuItems = [];
     if (settingsBtnEl) { settingsBtnEl.style.display = 'block'; settingsBtnEl.classList.remove('menu-open'); }
-    currentShip = sessionStorage.getItem('ph_ship') || 'protector'; warpState = 'none'; warpAt = 0; warpNextShip = null;
+    { const _s = sessionStorage.getItem('ph_ship'); currentShip = (_s && _SHIP_CONFIGS[_s]) ? _s : 'protector'; } warpState = 'none'; warpAt = 0; warpNextShip = null;
     shakeAt = 0; shakeDur = 0; shakeAmp = 0;
     mouseX = -1; mouseY = -1;
     // Restore timed-block state that may have been set before navigating away
@@ -2298,7 +2314,7 @@
         carrierRestY = H * 0.78;
         carrierY = carrierRestY;
         carrierState = 'present';
-        shipX = W * 0.40 + CARRIER_BAY_DX[CARRIER_SHIP_ORDER.indexOf(currentShip)];
+        { const _bi = CARRIER_SHIP_ORDER.indexOf(currentShip); shipX = W * 0.40 + (_bi >= 0 ? CARRIER_BAY_DX[_bi] : 0); }
         shipY = carrierRestY;
         _firstEnterFetch = false;
       } else {
@@ -2332,7 +2348,7 @@
               carrierRestY = H * 0.78;
               carrierY = carrierRestY;
               carrierState = 'present';
-              shipX = W * 0.40 + CARRIER_BAY_DX[CARRIER_SHIP_ORDER.indexOf(currentShip)];
+              { const _bi = CARRIER_SHIP_ORDER.indexOf(currentShip); shipX = W * 0.40 + (_bi >= 0 ? CARRIER_BAY_DX[_bi] : 0); }
               shipY = carrierRestY;
             } else if (!_wasFirst && shipPowerState === 'up') {
               shipPowerState = 'down';
@@ -2553,7 +2569,7 @@
       e.stopPropagation();
       for (const item of shipMenuItems) {
         if (_inBox(mx, my, item.hitbox)) {
-          if (!item.active) initWarpOut(item.ship);
+          if (!item.active && !item.locked) initWarpOut(item.ship);
           return;
         }
       }
@@ -2630,7 +2646,7 @@
     shieldHovered = _inBox(mouseX, mouseY, shieldHitbox);
     shipMenuHovered = _inBox(mouseX, mouseY, shipMenuHitbox) && blockingEnabled === true && shipPowerState === 'up' && warpState === 'none';
     const overShieldMenu   = shieldMenuOpen   && shieldMenuItems.some(item => _inBox(mouseX, mouseY, item.hitbox));
-    const overShipMenu     = shipMenuOpen     && shipMenuItems.some(item => !item.active && _inBox(mouseX, mouseY, item.hitbox));
+    const overShipMenu     = shipMenuOpen     && shipMenuItems.some(item => !item.active && !item.locked && _inBox(mouseX, mouseY, item.hitbox));
     const overSettingsMenu = settingsMenuOpen && settingsMenuItems.some(item => _inBox(mouseX, mouseY, item.hitbox));
     canvas.style.cursor = (arrowHovered || shieldHovered || overShieldMenu || shipMenuHovered || overShipMenu || overSettingsMenu) ? 'pointer' : '';
   });
