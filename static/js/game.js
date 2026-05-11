@@ -1277,8 +1277,6 @@
         const both = showDomain && showClient;
         ctx.save();
         ctx.globalAlpha = la * 0.85;
-        ctx.shadowColor = 'rgba(0,0,0,0.95)';
-        ctx.shadowBlur = 4;
         if (showClient && e.client) {
           ctx.fillStyle = 'rgba(130,185,225,0.80)';
           const cli = e.client.length > 32 ? '…' + e.client.slice(-30) : e.client;
