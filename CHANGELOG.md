@@ -4,6 +4,39 @@ All notable changes to ph-intercept are documented here.
 
 ---
 
+## [1.2.0] - 2026-05-10
+
+### Added
+
+- **Three new ships**: Serenity, Normandy, and the Planet Express Ship.
+- **Expanded ship menu** -- now shows 8 slots in a 4×2 grid (compact screens: 2×4), replacing the old single-row 4-slot layout.
+- **Sleep-detection timer** -- a `setInterval` now monitors `Date.now()` for jumps and invalidates the sprite cache on machine wake. This covers the remaining blind spot where neither `visibilitychange` nor `window focus` fires (tab already focused when the machine sleeps).
+
+### Changed
+
+- Carrier expanded to accommodate the new ships.
+
+### Fixed
+
+- **Drone missile tracking** -- missiles now re-compute heading toward the target's live position every frame. Previously the bearing was locked at fire time, causing drones to miss enemies that had moved.
+
+### Visual
+
+- Enterprise bitmap extended; nacelle positions and impulse drive flare adjusted. Impulse drive now renders in fire colors (orange/red) instead of blue. Thanks to [@andrewmsprague](https://github.com/andrewmsprague) for the NCC-1701 impulse drive tips.
+- Drone explosions tuned: 80→50 particles, smaller radii, 1300ms→900ms duration, tighter blast rings.
+- `dimColor` opacity raised across all ships for better visibility when docked in the carrier menu.
+- Gravity update arrow larger.
+- Splash screen tagline minimum font size bumped from 11 to 12 px.
+
+### Infrastructure
+
+- Docker base image switched from `python:3.14-slim` to `python:3.14-alpine3.23`, meaningfully reducing image size.
+- `PYTHONDONTWRITEBYTECODE=1` and `PYTHONUNBUFFERED=1` added to the image environment.
+- `pip`, `setuptools`, and `wheel` removed from the final image layer.
+- Non-root user now created with `-H` (no home directory) and `-s /sbin/nologin` (no login shell).
+
+---
+
 ## [1.1.6] - 2026-05-09
 
 ### Fixed

@@ -61,7 +61,7 @@ services:
       BG_IMAGE: ""
 
       # SSL certificate verification. Set to "false" if Pi-hole uses HTTPS
-      # with a self-signed certificate. Leave as "true" for HTTP or valid HTTPS.
+      #  with a self-signed certificate. Leave as "true" for HTTP or valid HTTPS.
       PIHOLE_VERIFY_SSL: "true"
 
       # Optional: comma-separated regex patterns. Matching domains spawn no ships. Case-insensitive.
@@ -108,7 +108,7 @@ Open `http://your-host:4653`.
 | Tag | What it is |
 |-----|------------|
 | `:latest` | Latest stable release. |
-| `:X.Y.Z` | Pinned release (e.g. `1.1.6`). |
+| `:X.Y.Z` | Pinned release (e.g. `1.2.0`). |
 | `:develop` | Built automatically on every push to the `develop` branch. May be unstable. Good for trying out what I'm working on. |
 
 To switch to the develop build, change the image line in your `compose.yaml`:
@@ -155,7 +155,7 @@ Ship weapon color tracks tier: green for tier 1, cyan for tier 2, gold for tier 
 
 The ship targets and destroys blocked entities autonomously. At five on-screen threats a support drone launches and flanks; at ten a second drone deploys. Drones are recalled when the threat count drops.
 
-Four ships are selectable from the HUD: **Protector** (NSEA Protector, default), **Falcon** (Millennium Falcon), **Swordfish** (Swordfish II), and **Enterprise** (NCC-1701). Switching ships triggers a warp-out/warp-in transition that pushes nearby entities aside.
+Seven ships are selectable from the HUD, shown in an 8-slot 4×2 grid: **Protector** (NSEA Protector, default), **Falcon** (Millennium Falcon), **Swordfish** (Swordfish II), **Enterprise** (NCC-1701), **Serenity** (Firefly), **Normandy** (Mass Effect), and **PES** (Planet Express Ship). Switching ships triggers a warp-out/warp-in transition that pushes nearby entities aside.
 
 <img width="374" height="111" alt="image" src="https://github.com/user-attachments/assets/fcd98b95-fa6b-4149-8247-f2f7ece9f156" />
 
