@@ -6,9 +6,15 @@ on:
     paths-ignore:
       - "README.md"
       - "CHANGELOG.md"
+      - "SECURITY.md"
+      - "LICENSE"
       - "compose.yaml"
+      - ".gitattributes"
+      - ".gitignore"
       - ".github/FUNDING.yml"
       - ".github/dependabot.yml"
+      - ".github/workflows/codeql.yml"
+      - ".github/workflows/publish.yml"
 
 jobs:
   build-and-push:
