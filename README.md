@@ -35,6 +35,8 @@ services:
       resources:
         limits:
           memory: 128m
+          cpus: "1"
+          pids: 20
 
     environment:
       # REQUIRED: Pi-hole v6 API endpoint
@@ -75,6 +77,15 @@ services:
 
     cap_drop:
       - ALL
+
+    security_opt:
+      - "no-new-privileges:true"
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
     ports:
       # Host port : container port. Change the left side if 4653 is taken

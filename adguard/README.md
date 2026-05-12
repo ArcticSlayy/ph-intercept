@@ -1,4 +1,4 @@
-# ph-intercept — AdGuard Home
+# ph-intercept - AdGuard Home
 
 A DNS dashboard that runs as a standalone Docker container alongside your AdGuard Home instance. Streams live DNS query events from the AdGuard Home API and renders them as pixel-art friendlies and enemies. Blocked queries are destroyed by the ship, allowed queries fly through. Toggle protection, set timed blocks, trigger filter list updates, and switch ships from the HUD.
 
@@ -33,6 +33,8 @@ services:
       resources:
         limits:
           memory: 128m
+          cpus: "1"
+          pids: 20
 
     environment:
       PROVIDER: adguard
@@ -79,6 +81,15 @@ services:
     cap_drop:
       - ALL
 
+    security_opt:
+      - "no-new-privileges:true"
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
     ports:
       # Host port : container port. Change the left side if 4663 is taken
       - "4663:4653"
@@ -90,11 +101,11 @@ services:
     # Optional: only needed if you use static IPs on a custom Docker network
     # Uncomment both networks blocks if you need this
     # networks:
-    #   dns_net:
+    #   intercept_net:
     #     ipv4_address: this.container.dockernet.ip
 
 # networks:
-#   dns_net:
+#   intercept_net:
 #     external: true
 ```
 
