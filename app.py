@@ -1,4 +1,4 @@
-"""ph-intercept - Pi-hole DNS game."""
+"""ph-intercept - DNS game (Pi-hole and AdGuard Home)."""
 
 import asyncio
 from contextlib import asynccontextmanager
@@ -13,12 +13,20 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
 
-from core.config import BG_MODE, BG_IMAGE, PIHOLE_DASHBOARD, PIHOLE_VERIFY_SSL, RETURN_URL, SKY_PRESET, SKY_PRESETS
-from core.pihole import (
-    add_ws_client, get_pihole_stats, query_poller,
-    remove_ws_client, reset_watermark, toggle_blocking, trigger_gravity_update,
-    drop_session,
-)
+from core.config import BG_MODE, BG_IMAGE, PROVIDER, RETURN_URL, SKY_PRESET, SKY_PRESETS
+
+if PROVIDER == "adguard":
+    from core.config import ADGUARD_DASHBOARD as _DASHBOARD, ADGUARD_VERIFY_SSL as _VERIFY_SSL
+    from core.adguard import (
+        add_ws_client, get_stats, query_poller, remove_ws_client,
+        reset_watermark, toggle_blocking, trigger_filter_update, drop_session,
+    )
+else:
+    from core.config import PIHOLE_DASHBOARD as _DASHBOARD, PIHOLE_VERIFY_SSL as _VERIFY_SSL
+    from core.pihole import (
+        add_ws_client, remove_ws_client, reset_watermark, toggle_blocking, drop_session, query_poller,
+        get_pihole_stats as get_stats, trigger_gravity_update as trigger_filter_update,
+    )
 
 _http_client: httpx.AsyncClient | None = None
 
@@ -26,7 +34,7 @@ _http_client: httpx.AsyncClient | None = None
 @asynccontextmanager
 async def lifespan(_app):
     global _http_client
-    _http_client = httpx.AsyncClient(timeout=1.5, headers={"User-Agent": "ph-intercept"}, verify=PIHOLE_VERIFY_SSL)
+    _http_client = httpx.AsyncClient(timeout=1.5, headers={"User-Agent": "ph-intercept"}, verify=_VERIFY_SSL)
     poller = asyncio.create_task(query_poller(_http_client))
     yield
     poller.cancel()
@@ -74,7 +82,8 @@ async def index(request: Request) -> HTMLResponse:
     preset = SKY_PRESETS.get(SKY_PRESET, SKY_PRESETS["summer_triangle"])
     return templates.TemplateResponse(request, "index.html", {
         "bg_mode": BG_MODE,
-        "pihole_dashboard": PIHOLE_DASHBOARD,
+        "provider": PROVIDER,
+        "pihole_dashboard": _DASHBOARD,
         "bg_config": {
             "bg_mode": BG_MODE,
             "bg_image": BG_IMAGE,
@@ -86,15 +95,15 @@ async def index(request: Request) -> HTMLResponse:
 
 
 async def pihole_stats(_request: Request) -> JSONResponse:
-    data = await get_pihole_stats(_http_client)
+    data = await get_stats(_http_client)
     if not data:
         return JSONResponse({})
     return JSONResponse({
-        "percent":  data.get("percent"),
-        "queries":  data.get("queries"),
-        "blocked":  data.get("blocked"),
-        "gravity":  data.get("gravity"),
-        "blocking": data.get("blocking"),
+        "percent":     data.get("percent"),
+        "queries":     data.get("queries"),
+        "blocked":     data.get("blocked"),
+        "gravity":     data.get("gravity"),
+        "blocking":    data.get("blocking"),
         "block_timer": data.get("block_timer"),
     })
 
@@ -113,7 +122,7 @@ async def pihole_toggle(request: Request) -> JSONResponse:
 
 
 async def pihole_gravity_update(request: Request) -> JSONResponse:
-    return JSONResponse(await trigger_gravity_update(_http_client))
+    return JSONResponse(await trigger_filter_update(_http_client))
 
 
 async def pihole_events(request: Request) -> StreamingResponse:

@@ -14,6 +14,7 @@ __pycache__/
 bg/
 scripts/
 compose.override.yaml
+**/compose.override.yaml
 htmlcov/
 pytest.ini
 tests/

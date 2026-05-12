@@ -22,6 +22,7 @@
 
 <!-- BG config injected server-side so JS doesn't need a separate fetch -->
 <script type="application/json" id="bg-config">{{ bg_config | tojson }}</script>
+<script>window.PROVIDER = {{ provider | tojson }};</script>
 
 <div id="bg-image"></div>
 
@@ -43,7 +44,11 @@ if (window.BG_CONFIG.bg_image) {
 </div>
 
 <div id="pihole-link" data-href="{{ pihole_dashboard | e }}">
+  {% if provider == 'adguard' %}
+  <img src="/static/icons/adguard.svg" alt="AdGuard" draggable="false">
+  {% else %}
   <img src="/static/icons/pihole.svg" alt="Pi-hole" draggable="false">
+  {% endif %}
 </div>
 
 <!-- Starfield deps (always loaded; no-ops when BG_MODE != starfield) -->
