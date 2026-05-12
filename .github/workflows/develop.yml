@@ -18,7 +18,6 @@ on:
       - ".github/workflows/codeql.yml"
       - ".github/workflows/develop.yml"
       - ".github/workflows/publish.yml"
-      - ".github/workflows/publish-self.yml"
 
 jobs:
   build-and-push:
