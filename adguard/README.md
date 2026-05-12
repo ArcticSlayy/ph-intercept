@@ -4,6 +4,8 @@ A DNS dashboard that runs as a standalone Docker container alongside your AdGuar
 
 Designed to be dropped in alongside an existing AdGuard Home setup with no extra dependencies.
 
+<img width="1713" height="1254" alt="image" src="https://github.com/user-attachments/assets/791ba70f-c6cd-4495-8135-0e0d2286668e" />
+
 ---
 
 ## Quick Start
@@ -126,6 +128,8 @@ Each DNS query spawns an entity. Tier scales with how many times that domain has
 
 **Allowed queries:** friendly ships traveling across the screen. Cache-answered queries move faster than upstream-answered ones.
 
+<img width="487" height="354" alt="image" src="https://github.com/user-attachments/assets/7c80bb93-6ccd-4ac2-b1c9-e34a1f54cc31" />
+
 | Tier | Condition | Shape | Color |
 |------|-----------|-------|-------|
 | 1 | First query | Rounded shuttle · Delta wing · X-wing | Green · Blue · Lime |
@@ -133,6 +137,8 @@ Each DNS query spawns an entity. Tier scales with how many times that domain has
 | 3+ | Three or more queries while on screen | Capital ship | Gold |
 
 **Blocked queries:** enemies the ship targets and destroys. A domain blocked again while still on screen mutates its sprite to the next tier in place.
+
+<img width="621" height="471" alt="image" src="https://github.com/user-attachments/assets/a2da33be-7015-4b34-9c51-6904b06573d0" />
 
 | Tier | Condition | Shape | Color |
 |------|-----------|-------|-------|
@@ -150,6 +156,8 @@ The ship targets and destroys blocked entities autonomously. At five on-screen t
 
 Seven ships are selectable from the HUD, shown in an 8-slot 4×2 grid: **Protector** (NSEA Protector, default), **Falcon** (Millennium Falcon), **Swordfish** (Swordfish II), **Enterprise** (NCC-1701), **Serenity** (Firefly), **Normandy** (Mass Effect), and **PES** (Planet Express Ship). Switching ships triggers a warp-out/warp-in transition that pushes nearby entities aside.
 
+<img width="370" height="176" alt="ships" src="https://github.com/user-attachments/assets/694a3786-10b5-4427-8f35-7d160b28c67b" />
+
 ---
 
 ## The HUD
@@ -163,6 +171,8 @@ A strip across the bottom, divided into four panels:
 **FILTER:** total rules across all active filter lists. The arrow triggers a filter list refresh and confirms when done.
 
 **SHIPS:** active ship name. Click to open the ship selector.
+
+<img width="1376" height="105" alt="download" src="https://github.com/user-attachments/assets/cc4adf89-ac1e-402f-aed2-68ed282b49a3" />
 
 A hamburger button at the left edge of the HUD opens the **Settings** panel, which includes:
 
@@ -180,6 +190,8 @@ Display settings are saved to `localStorage` and restored on next load.
 Three modes are available via `BG_MODE`:
 
 **`starfield` (default):** Renders a real section of the night sky from an accurate star catalog (~12,200 stars to magnitude 6.8, color-coded by spectral type). Positions use equatorial coordinates; what you see is where the stars actually are. The sky region is set by `SKY_PRESET`.
+
+<img width="684" height="487" alt="image" src="https://github.com/user-attachments/assets/d6a04374-9341-464b-8f24-71cafc8bbbeb" />
 
 Star data is from the **HYG Database** by David Nash ([astronexus.com](https://astronexus.com)), combining Hipparcos (ESA) and the Yale Bright Star Catalogue.
 
