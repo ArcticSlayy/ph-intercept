@@ -4,7 +4,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir --root-user-action=ignore --upgrade pip \
     && pip install --no-cache-dir --root-user-action=ignore -r requirements.txt \
-    && pip uninstall -y pip
+    && pip uninstall --root-user-action=ignore -y pip
 COPY core/      core/
 COPY static/    static/
 COPY templates/ templates/
