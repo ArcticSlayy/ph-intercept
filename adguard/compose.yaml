@@ -1,0 +1,73 @@
+services:
+  ph-intercept:
+    image: ghcr.io/m00grin/ph-intercept:latest
+    hostname: ph-intercept
+    container_name: ph-intercept
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
+    environment:
+      PROVIDER: adguard
+
+      # REQUIRED: AdGuard Home control API endpoint
+      # Example: "http://192.168.1.2:3000/control"
+      ADGUARD_URL: "http://CHANGE.ME:PORT/control"
+
+      # REQUIRED: AdGuard Home username or email for login.
+      ADGUARD_USERNAME: "CHANGE.ME"
+
+      # CLI users: Create a .env file in the same dir as this compose file with:
+      #  ADGUARD_PASSWORD=your_adguard_password
+      # Portainer Web users: Add the environment variable: ADGUARD_PASSWORD=your_adguard_password
+      ADGUARD_PASSWORD: ${ADGUARD_PASSWORD}
+
+      # Optional: where ESC navigates to (like your homelab dashboard or homepage)
+      # Accepts http://, https://, protocol-relative (//), relative paths, and custom app schemes
+      # Leave blank ("") to disable ESC entirely
+      RETURN_URL: ""
+
+      # Background style: starfield | dark | nebula
+      BG_MODE: starfield
+
+      # Sky region shown when BG_MODE=starfield:
+      #   summer_triangle | orion | scorpius | southern_cross
+      SKY_PRESET: summer_triangle
+
+      # Set BG_IMAGE to use a custom background. URL for an image, or /bg/your-filename.jpg
+      # If set, BG_IMAGE overrides BG_MODE entirely
+      BG_IMAGE: ""
+
+      # SSL certificate verification. Set to "false" if AdGuard uses HTTPS
+      #  with a self-signed certificate. Leave as "true" for HTTP or valid HTTPS.
+      ADGUARD_VERIFY_SSL: "true"
+
+      # Optional: comma-separated regex patterns. Matching domains spawn no ships. Case-insensitive.
+      # ADGUARD_IGNORE_DOMAINS: .*\.local$,.*\.internal$
+
+    volumes:
+      # Portainer Web users: This will resolve to /data/compose/<stack-id>/bg/
+      - ./bg:/app/static/bg
+
+    cap_drop:
+      - ALL
+
+    ports:
+      # Host port : container port. Change the left side if 4663 is taken
+      - "4663:4653"
+
+    # Optional: point DNS at your AdGuard Home instance
+    # dns:
+    #   - your.dns.dockernet.ip
+
+    # Optional: only needed if you use static IPs on a custom Docker network
+    # Uncomment both networks blocks if you need this
+    # networks:
+    #   dns_net:
+    #     ipv4_address: this.container.dockernet.ip
+
+# networks:
+#   dns_net:
+#     external: true

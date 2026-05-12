@@ -3,6 +3,7 @@
   const canvas = document.getElementById('pihole-canvas');
   const ctx = canvas.getContext('2d');
   const phLinkEl = document.getElementById('pihole-link');
+  const PROVIDER = window.PROVIDER || 'pihole';
   const settingsBtnEl = document.getElementById('settings-btn');
   let W = 0, H = 0;
 
@@ -105,11 +106,23 @@
     pes:        ["Good news everyone!", "I don't want to live on this planet anymore.", "Shut up and take my money!", "I did do the nasty in the pasty."],
     inbound:    ["[coming soon.]"],
   };
-  const DISABLE_OPTIONS = [
+  function _secsUntilMidnight() {
+    const now = new Date(), midnight = new Date(now);
+    midnight.setHours(24, 0, 0, 0);
+    return Math.round((midnight - now) / 1000);
+  }
+  const DISABLE_OPTIONS = PROVIDER === 'adguard' ? [
+    { label: '30 SEC',   timer: 30,   ms: 30000 },
+    { label: '1 MIN',    timer: 60,   ms: 60000 },
+    { label: '10 MIN',   timer: 600,  ms: 600000 },
+    { label: '1 HR',     timer: 3600, ms: 3600000 },
+    { label: 'TOMORROW', timerFn: _secsUntilMidnight },
+    { label: 'DISABLE',  timer: null, ms: 0 },
+  ] : [
     { label: '10 SEC', timer: 10,  ms: 10000 },
     { label: '30 SEC', timer: 30,  ms: 30000 },
     { label: '5 MIN',  timer: 300, ms: 300000 },
-    { label: 'DISABLE',   timer: null, ms: 0 },
+    { label: 'DISABLE', timer: null, ms: 0 },
   ];
   // Draws one nacelle engine exhaust flame centered at (x, base).
   function drawEngineFlare(x, base, ft, wScale = 1, lScale = wScale, taper = 0.6, shape = 'arch', wobble = 1, col = null) {
@@ -795,7 +808,7 @@
   }
 
   const _phIcon = new Image();
-  _phIcon.src = '/static/icons/pihole.svg';
+  _phIcon.src = PROVIDER === 'adguard' ? '/static/icons/adguard.svg' : '/static/icons/pihole.svg';
 
   const _SHIP_CONFIGS = {
     protector:  { bmp: PROTECTOR_BMP,     color: 'rgba(195,208,240,0.95)', glow: 'rgba(170,190,235,0.55)', dimColor: 'rgba(195,208,240,0.55)',
@@ -1879,6 +1892,15 @@
       ctx.fillText(text, x, _yLabel);
     };
     const _fmtN = n => n == null ? '—' : n >= 1e6 ? (n/1e6).toFixed(2)+'M' : n >= 1e4 ? (n/1e3).toFixed(2)+'K' : String(n);
+    const _fmtGravity = n => {
+      if (n == null) return '—';
+      n = Math.round(n);
+      if (n < 100000)   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      if (n < 1000000)  return (n / 1000).toFixed(1) + 'K';
+      if (n < 10000000) return (n / 1000000).toFixed(3) + 'M';
+      if (n < 100000000) return (n / 1000000).toFixed(2) + 'M';
+      return (n / 1000000).toFixed(1) + 'M';
+    };
 
     // ── INTERCEPT ──────────────────────────────────────────
     ctx.save();
@@ -1957,12 +1979,13 @@
       shieldMenuItems = DISABLE_OPTIONS.map((opt, idx) => {
         const iy = menuY + mPad + idx * mItemH;
         const hb = { x: menuX, y: iy, w: mw, h: mItemH };
-        const hov = mouseX >= hb.x && mouseX <= hb.x + hb.w && mouseY >= hb.y && mouseY <= hb.y + hb.h;
+        const hov = mouseX >= hb.x && mouseX < hb.x + hb.w && mouseY >= hb.y && mouseY < hb.y + hb.h;
         if (hov) { ctx.fillStyle = 'rgba(140,160,175,0.08)'; ctx.fillRect(hb.x, hb.y, hb.w, hb.h); }
         ctx.textAlign = 'left';
         ctx.fillStyle = hov ? 'rgba(215,225,248,0.95)' : 'rgba(175,200,238,0.65)';
         ctx.fillText(opt.label, menuX + 14, iy + 18);
-        return { ...opt, hitbox: hb };
+        const timer = opt.timerFn ? opt.timerFn() : opt.timer;
+        return { ...opt, timer, hitbox: hb };
       });
     } else {
       shieldMenuItems = [];
@@ -2040,8 +2063,9 @@
         const phHb = { x: smX, y: siy, w: smw, h: smPhRowH };
         const phHov = mouseX >= phHb.x && mouseX <= phHb.x + phHb.w && mouseY >= phHb.y && mouseY <= phHb.y + phHb.h;
         if (phHov) { ctx.fillStyle = 'rgba(140,160,175,0.08)'; ctx.fillRect(phHb.x, phHb.y, phHb.w, phHb.h); }
-        // Pi-hole icon
-        const iconH = smPhRowH - 8, iconW = Math.round(iconH * 90 / 130);
+        // Provider icon (Pi-hole or AdGuard)
+        const _iconAspect = PROVIDER === 'adguard' ? 1.0 : (90 / 130);
+        const iconH = smPhRowH - 8, iconW = Math.round(iconH * _iconAspect);
         const iconX = smX + 12, iconY = siy + (smPhRowH - iconH) / 2;
         if (_phIcon.complete && _phIcon.naturalWidth > 0) {
           ctx.save();
@@ -2053,7 +2077,7 @@
         ctx.textAlign = 'left';
         ctx.font = `${_fSub}px "Press Start 2P", monospace`;
         ctx.fillStyle = phHov ? 'rgba(215,225,248,0.95)' : 'rgba(175,200,238,0.55)';
-        ctx.fillText('PI-HOLE', iconX + iconW + 12, siy + smPhRowH / 2 + 6);
+        ctx.fillText(PROVIDER === 'adguard' ? 'ADGUARD' : 'PI-HOLE', iconX + iconW + 12, siy + smPhRowH / 2 + 6);
         // External link arrow drawn with lines
         const _ax = smX + smw - 14, _ay = siy + smPhRowH / 2;
         ctx.strokeStyle = phHov ? 'rgba(215,225,248,0.70)' : 'rgba(140,160,175,0.32)';
@@ -2113,16 +2137,16 @@
       ctx.restore();
     }
 
-    // ── GRAVITY ────────────────────────────────────────────
+    // ── GRAVITY / FILTER ───────────────────────────────────
     ctx.save();
     ctx.beginPath(); ctx.rect(TDB_X, SY, TDB_W, SH); ctx.clip();
-    _modLabel('GRAVITY', TDB_X + TDB_W / 2, 'center');
+    _modLabel(PROVIDER === 'adguard' ? 'FILTER' : 'GRAVITY', TDB_X + TDB_W / 2, 'center');
     let sigsStr, sigsColor = 'rgba(100,160,210,0.65)';
     if (gravityState === 'updating') {
       sigsStr = 'UPDATING';
       sigsColor = `rgba(255,190,50,${(0.65 + 0.35 * Math.sin(t * 0.006)).toFixed(2)})`;
     } else {
-      sigsStr = hudGravity == null ? '—' : hudGravity >= 1e6 ? (hudGravity/1e6).toFixed(3)+'M' : hudGravity >= 1e3 ? (hudGravity/1e3).toFixed(3)+'K' : String(hudGravity);
+      sigsStr = _fmtGravity(hudGravity);
       if (gravityState === 'done') {
         const age = t - gravityDoneAt;
         const flash = Math.max(0, 1 - age / 1200);
