@@ -13,6 +13,9 @@ _adguard_ssl_raw = os.environ.get("ADGUARD_VERIFY_SSL", "true").strip().lower()
 ADGUARD_VERIFY_SSL = _adguard_ssl_raw not in ("false", "0", "no")
 ADGUARD_DASHBOARD = ADGUARD_BASE.rstrip('/').removesuffix('/control') + '/'
 
+PIHOLE2_URL = os.environ.get("PIHOLE2_URL", "").strip()
+TWO_PLAYER_LOCAL_CONFIGURED = bool(PIHOLE2_URL)
+
 RETURN_URL = os.environ.get("RETURN_URL", "")
 BG_IMAGE = os.environ.get("BG_IMAGE", "")
 BG_MODE = "image" if BG_IMAGE else os.environ.get("BG_MODE", "starfield").lower()

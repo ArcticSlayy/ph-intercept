@@ -13,7 +13,8 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
 
-from core.config import BG_MODE, BG_IMAGE, PROVIDER, RETURN_URL, SKY_PRESET, SKY_PRESETS
+from core.config import BG_MODE, BG_IMAGE, PROVIDER, RETURN_URL, SKY_PRESET, SKY_PRESETS, TWO_PLAYER_LOCAL_CONFIGURED
+from core.multiplayer import get_status as mp_status, set_mode as mp_set_mode, rotate as mp_rotate
 
 if PROVIDER == "adguard":
     from core.config import ADGUARD_DASHBOARD as _DASHBOARD, ADGUARD_VERIFY_SSL as _VERIFY_SSL
@@ -121,6 +122,22 @@ async def pihole_toggle(request: Request) -> JSONResponse:
     return JSONResponse(await toggle_blocking(_http_client, bool(body.get("enable", True)), timer))
 
 
+async def two_player_status(_request: Request) -> JSONResponse:
+    return JSONResponse(mp_status(TWO_PLAYER_LOCAL_CONFIGURED))
+
+
+async def two_player_set_mode(request: Request) -> JSONResponse:
+    body = await request.json()
+    try:
+        return JSONResponse(mp_set_mode(body.get("mode", ""), TWO_PLAYER_LOCAL_CONFIGURED))
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+
+
+async def two_player_rotate(_request: Request) -> JSONResponse:
+    return JSONResponse(mp_rotate(TWO_PLAYER_LOCAL_CONFIGURED))
+
+
 async def pihole_gravity_update(request: Request) -> JSONResponse:
     return JSONResponse(await trigger_filter_update(_http_client))
 
@@ -156,6 +173,9 @@ app = Starlette(
         Route("/api/pihole/stats", pihole_stats),
         Route("/api/pihole/toggle", pihole_toggle, methods=["POST"]),
         Route("/api/pihole/gravity-update", pihole_gravity_update, methods=["POST"]),
+        Route("/api/2p/status", two_player_status),
+        Route("/api/2p/mode", two_player_set_mode, methods=["POST"]),
+        Route("/api/2p/rotate", two_player_rotate, methods=["POST"]),
         Route("/api/pihole/events", pihole_events),
         Mount("/static", StaticFiles(directory=_base / "static"), name="static"),
         Mount("/bg", StaticFiles(directory=_base / "static" / "bg", check_dir=False), name="bg"),
