@@ -10,4 +10,7 @@ class_name = "RelaySession"
 tag         = "v1"
 new_sqlite_classes = ["RelaySession"]
 
+workers_dev  = false
+preview_urls = false
+
 # Add a custom domain via the Workers dashboard: Settings > Domains & Routes > Custom Domain
