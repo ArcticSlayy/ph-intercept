@@ -3519,6 +3519,6 @@
   window._game2PReconnect = function() {
     if (!active) return;
     _disconnectP2();
-    _init2P().catch(() => {});
+    setTimeout(() => { if (active) _init2P().catch(() => {}); }, 400);
   };
 })();
