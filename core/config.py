@@ -14,7 +14,13 @@ ADGUARD_VERIFY_SSL = _adguard_ssl_raw not in ("false", "0", "no")
 ADGUARD_DASHBOARD = ADGUARD_BASE.rstrip('/').removesuffix('/control') + '/'
 
 PIHOLE2_URL = os.environ.get("PIHOLE2_URL", "").strip()
+PIHOLE2_PASSWORD = os.environ.get("PIHOLE2_PASSWORD", "")
+PIHOLE2_DASHBOARD = PIHOLE2_URL.rstrip('/').removesuffix('/api') + '/admin' if PIHOLE2_URL else ""
 TWO_PLAYER_LOCAL_CONFIGURED = bool(PIHOLE2_URL)
+
+_remote_2p_raw = os.environ.get("REMOTE_2P", "false").strip().lower()
+REMOTE_2P_ENABLED = _remote_2p_raw not in ("false", "0", "no")
+TWO_PLAYER_ENABLED = TWO_PLAYER_LOCAL_CONFIGURED or REMOTE_2P_ENABLED
 
 RETURN_URL = os.environ.get("RETURN_URL", "")
 BG_IMAGE = os.environ.get("BG_IMAGE", "")

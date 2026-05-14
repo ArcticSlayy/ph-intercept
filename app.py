@@ -13,8 +13,8 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
 
-from core.config import BG_MODE, BG_IMAGE, PROVIDER, RETURN_URL, SKY_PRESET, SKY_PRESETS, TWO_PLAYER_LOCAL_CONFIGURED
-from core.multiplayer import get_status as mp_status, set_mode as mp_set_mode, rotate as mp_rotate
+from core.config import BG_MODE, BG_IMAGE, PROVIDER, RETURN_URL, SKY_PRESET, SKY_PRESETS, TWO_PLAYER_LOCAL_CONFIGURED, TWO_PLAYER_ENABLED, REMOTE_2P_ENABLED, PIHOLE2_DASHBOARD
+from core.multiplayer import get_status as mp_status, set_mode as mp_set_mode, rotate as mp_rotate, update_hashes as mp_update_hashes
 
 if PROVIDER == "adguard":
     from core.config import ADGUARD_DASHBOARD as _DASHBOARD, ADGUARD_VERIFY_SSL as _VERIFY_SSL
@@ -29,26 +29,45 @@ else:
         get_pihole_stats as get_stats, trigger_gravity_update as trigger_filter_update,
     )
 
+if TWO_PLAYER_LOCAL_CONFIGURED:
+    from core.pihole import (
+        add_p2_ws_client, remove_p2_ws_client, reset_p2_watermark,
+        get_p2_pihole_stats, drop_p2_session, query_p2_poller,
+    )
+
 _http_client: httpx.AsyncClient | None = None
+_http_client2: httpx.AsyncClient | None = None
 
 
 @asynccontextmanager
 async def lifespan(_app):
-    global _http_client
+    global _http_client, _http_client2
     _http_client = httpx.AsyncClient(timeout=1.5, headers={"User-Agent": "ph-intercept"}, verify=_VERIFY_SSL)
-    poller = asyncio.create_task(query_poller(_http_client))
+    tasks = [asyncio.create_task(query_poller(_http_client))]
+    if TWO_PLAYER_LOCAL_CONFIGURED:
+        _http_client2 = httpx.AsyncClient(timeout=1.5, headers={"User-Agent": "ph-intercept"})
+        tasks.append(asyncio.create_task(query_p2_poller(_http_client2)))
     yield
-    poller.cancel()
-    try:
-        await poller
-    except asyncio.CancelledError:
-        pass
+    for t in tasks:
+        t.cancel()
+    for t in tasks:
+        try:
+            await t
+        except asyncio.CancelledError:
+            pass
     try:
         async with asyncio.timeout(1.0):
             await drop_session(_http_client)
     except Exception:
         pass
     await _http_client.aclose()
+    if _http_client2:
+        try:
+            async with asyncio.timeout(1.0):
+                await drop_p2_session(_http_client2)
+        except Exception:
+            pass
+        await _http_client2.aclose()
 
 
 _base = Path(__file__).parent
@@ -60,7 +79,7 @@ _CSP = (
     "style-src 'self' 'unsafe-inline'; "
     "img-src * data: blob:; "
     "font-src 'self'; "
-    "connect-src 'self'; "
+    "connect-src 'self' wss://relay.intercept.work; "
     "frame-ancestors *"
 )
 
@@ -85,6 +104,9 @@ async def index(request: Request) -> HTMLResponse:
         "bg_mode": BG_MODE,
         "provider": PROVIDER,
         "pihole_dashboard": _DASHBOARD,
+        "pihole2_dashboard": PIHOLE2_DASHBOARD,
+        "two_player_enabled": TWO_PLAYER_ENABLED,
+        "remote_2p_enabled": REMOTE_2P_ENABLED,
         "bg_config": {
             "bg_mode": BG_MODE,
             "bg_image": BG_IMAGE,
@@ -123,19 +145,75 @@ async def pihole_toggle(request: Request) -> JSONResponse:
 
 
 async def two_player_status(_request: Request) -> JSONResponse:
-    return JSONResponse(mp_status(TWO_PLAYER_LOCAL_CONFIGURED))
+    return JSONResponse(mp_status(TWO_PLAYER_LOCAL_CONFIGURED, REMOTE_2P_ENABLED))
 
 
 async def two_player_set_mode(request: Request) -> JSONResponse:
     body = await request.json()
     try:
-        return JSONResponse(mp_set_mode(body.get("mode", ""), TWO_PLAYER_LOCAL_CONFIGURED))
+        return JSONResponse(mp_set_mode(body.get("mode", ""), TWO_PLAYER_LOCAL_CONFIGURED, REMOTE_2P_ENABLED))
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
 
 
 async def two_player_rotate(_request: Request) -> JSONResponse:
-    return JSONResponse(mp_rotate(TWO_PLAYER_LOCAL_CONFIGURED))
+    return JSONResponse(mp_rotate(TWO_PLAYER_LOCAL_CONFIGURED, REMOTE_2P_ENABLED))
+
+
+async def two_player_update(request: Request) -> JSONResponse:
+    body = await request.json()
+    try:
+        return JSONResponse(mp_update_hashes(
+            body.get("session_id"),
+            body.get("session_key"),
+            TWO_PLAYER_LOCAL_CONFIGURED,
+            REMOTE_2P_ENABLED,
+        ))
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+
+
+async def pihole2_stats(_request: Request) -> JSONResponse:
+    if not TWO_PLAYER_LOCAL_CONFIGURED or not _http_client2:
+        return JSONResponse({})
+    data = await get_p2_pihole_stats(_http_client2)
+    if not data:
+        return JSONResponse({})
+    return JSONResponse({
+        "percent":     data.get("percent"),
+        "queries":     data.get("queries"),
+        "blocked":     data.get("blocked"),
+        "gravity":     data.get("gravity"),
+        "blocking":    data.get("blocking"),
+        "block_timer": data.get("block_timer"),
+    })
+
+
+async def pihole2_events(request: Request) -> StreamingResponse:
+    if not TWO_PLAYER_LOCAL_CONFIGURED:
+        return StreamingResponse(iter([]), media_type="text/event-stream")
+
+    async def generate():
+        q: asyncio.Queue = asyncio.Queue(maxsize=60)
+        add_p2_ws_client(q)
+        reset_p2_watermark()
+        yield ": ok\n\n"
+        try:
+            while True:
+                payload = await q.get()
+                if payload is None:
+                    break
+                yield f"data: {payload}\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            remove_p2_ws_client(q)
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+    )
 
 
 async def pihole_gravity_update(request: Request) -> JSONResponse:
@@ -176,7 +254,10 @@ app = Starlette(
         Route("/api/2p/status", two_player_status),
         Route("/api/2p/mode", two_player_set_mode, methods=["POST"]),
         Route("/api/2p/rotate", two_player_rotate, methods=["POST"]),
+        Route("/api/2p/update", two_player_update, methods=["POST"]),
         Route("/api/pihole/events", pihole_events),
+        Route("/api/pihole2/stats", pihole2_stats),
+        Route("/api/pihole2/events", pihole2_events),
         Mount("/static", StaticFiles(directory=_base / "static"), name="static"),
         Mount("/bg", StaticFiles(directory=_base / "static" / "bg", check_dir=False), name="bg"),
     ],

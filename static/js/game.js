@@ -77,6 +77,26 @@
   function _saveDisplaySettings() {
     try { localStorage.setItem('ph_display', JSON.stringify({ friendlies: showFriendlies, domain: showDomain, client: showClient })); } catch {}
   }
+  // ── 2P state ──────────────────────────────────────────────────────
+  let twoPlayerMode = 'off';        // 'off' | 'local' | 'remote'
+  const p2Entities = [], p2Queue = [];
+  let lastP2Spawn = 0;
+  let p2ShipX = 0, p2ShipY = -300;
+  let p2CurrentShip = 'protector';
+  let p2HudStats = { blocked: null, queries: null, percent: null };
+  let p2BlockingEnabled = null;
+  let p2EvtSource = null, p2StatsPollTimer = null;
+  let relayWs = null;
+  let relayState = 'off';           // 'off' | 'waiting' | 'connected'
+  let _relayKey = null;             // CryptoKey for AES-256-GCM
+  let _p2ShipVisible = false;       // true once P2 has live data (drives ship arrival)
+  let _p2ShipRipInAt = 0;           // perf.now() when ship arrival animation fires
+  let _2pBannerAt = 0;              // perf.now() when 2P mode first activated (banner anim)
+  let _2pDividerAt = 0;             // perf.now() when divider first appeared
+  let _carrierSmoothX = 0;          // lerped carrier center X for smooth 2P mode transitions
+  const p2Lasers = [];
+  let lastP2Gun = 0;
+
   let currentShip = 'protector';  // 'protector'|'falcon'|'swordfish'|'enterprise'|'serenity'|'normandy'|'pes'
   let warpState = 'none';         // 'none' | 'out' | 'in'
   let warpAt = 0;
@@ -253,7 +273,7 @@
     let x, y, vx, vy, headStart = 0;
     if (blocked) {
       const spd = 0.055 + Math.random() * 0.03;
-      x = W * (0.1 + Math.random() * 0.8);
+      x = twoPlayerMode !== 'off' ? W * (0.05 + Math.random() * 0.40) : W * (0.1 + Math.random() * 0.8);
       if (Math.random() < 0.65) {
         y = -50;
       } else {
@@ -263,9 +283,10 @@
       vx = (Math.random() - 0.5) * 0.018; vy = spd;
     } else {
       const spd = isCache ? (0.095 + Math.random() * 0.03) : (0.078 + Math.random() * 0.03);
-      x = W * (0.05 + Math.random() * 0.9); y = -50;
+      x = twoPlayerMode !== 'off' ? W * (0.03 + Math.random() * 0.44) : W * (0.05 + Math.random() * 0.9);
+      y = -50;
       const goRight = Math.random() < 0.5;
-      const tx = goRight ? W + 100 : -100;
+      const tx = twoPlayerMode !== 'off' ? (goRight ? W / 2 - 20 : -100) : (goRight ? W + 100 : -100);
       const ty = H * (0.35 + Math.random() * 0.5);
       const d = Math.hypot(tx - x, ty - y);
       vx = (tx - x) / d * spd; vy = (ty - y) / d * spd;
@@ -289,6 +310,60 @@
       mutateAt: 0,
       mutateColor: '',
       warpPushed: false,
+    });
+  }
+
+  function spawnP2Entity(ev) {
+    if (ev.status === 'allowed' && !showFriendlies) return;
+    const blocked = ev.status === 'blocked';
+    const isCache = ev.source === 'cache';
+    const existing = p2Entities.find(e => e.domain === ev.domain && e.type === ev.status && e.state !== 'shot');
+    if (existing) {
+      const prevTier = Math.min(existing.count, 3);
+      existing.count++;
+      const newTier = Math.min(existing.count, 3);
+      if (blocked && newTier > prevTier) {
+        const tierColor = newTier >= 3 ? '190,60,255' : '255,130,30';
+        existing.mutateAt = performance.now();
+        existing.mutateColor = tierColor;
+        const ps = [];
+        for (let i = 0; i < 14; i++) {
+          const a = (Math.PI * 2 * i / 14) + (Math.random() - 0.5) * 0.3;
+          const s = 0.05 + Math.random() * 0.12;
+          ps.push({ x: existing.x, y: existing.y, vx: Math.cos(a)*s, vy: Math.sin(a)*s,
+                    r: 1.5 + Math.random() * 2.5, col: tierColor });
+        }
+        explosions.push({ ps, born: performance.now(), dur: 600 });
+      }
+      return;
+    }
+    if (p2Entities.length >= 50) return;
+    const now = performance.now();
+    let x, y, vx, vy, headStart = 0;
+    if (blocked) {
+      const spd = 0.055 + Math.random() * 0.03;
+      x = W * (0.55 + Math.random() * 0.40);
+      if (Math.random() < 0.65) { y = -50; }
+      else { y = H * (0.05 + Math.random() * 0.14); headStart = Math.min((y + 50) / spd, 1800); }
+      vx = (Math.random() - 0.5) * 0.018; vy = spd;
+    } else {
+      const spd = isCache ? (0.095 + Math.random() * 0.03) : (0.078 + Math.random() * 0.03);
+      x = W * (0.55 + Math.random() * 0.40); y = -50;
+      const goRight = Math.random() < 0.5;
+      const tx = goRight ? W + 100 : W / 2 + 50;
+      const ty = H * (0.35 + Math.random() * 0.5);
+      const d = Math.hypot(tx - x, ty - y);
+      vx = (tx - x) / d * spd; vy = (ty - y) / d * spd;
+    }
+    p2Entities.push({
+      type: ev.status, source: ev.source || 'upstream',
+      design: blocked ? Math.floor(Math.random() * 2) : Math.floor(Math.random() * 3),
+      x, y, vx, vy, wobble: Math.random() * Math.PI * 2,
+      domain: ev.domain, client: ev.client || '',
+      spawnTime: now - headStart, appearAt: now,
+      state: 'alive',
+      targetedAt: 0, shotAt: 0, labelAlpha: 1, count: 1,
+      mutateAt: 0, mutateColor: '', warpPushed: false,
     });
   }
 
@@ -353,6 +428,62 @@
     }
   }
 
+  function fireAtP2(ent) {
+    ent.shotAt = performance.now();
+    ent.mutateAt = 0;
+    const now = performance.now();
+    const tier = Math.min(ent.count, 3);
+    let seekerFire = false;
+    const _gtp2 = shipGunTipPos(p2CurrentShip, Math.round(p2ShipX), Math.round(p2ShipY));
+    if (tier >= 3) {
+      if (Math.random() < 0.5) {
+        ent.state = 'shot';
+        const sp = 10;
+        p2Lasers.push({ side: 0, tier, x1: ent.x - sp, y1: ent.y, born: now });
+        p2Lasers.push({ side: 2, tier, x1: ent.x,      y1: ent.y, born: now });
+        p2Lasers.push({ side: 1, tier, x1: ent.x + sp, y1: ent.y, born: now });
+      } else {
+        seekerFire = true;
+        ent.state = 'seeker-incoming';
+        ent.detonateAt = now + 330;
+        const sx0 = _gtp2.nx, sy0 = _gtp2.ny;
+        const tx = ent.x, ty = ent.y;
+        const ddx = tx - sx0, ddy = ty - sy0, ddist = Math.hypot(ddx, ddy) || 1;
+        const px = -ddy / ddist, py = ddx / ddist;
+        const midX = (sx0 + tx) / 2, midY = (sy0 + ty) / 2;
+        const offsets = [-52, 38, -24, 58, -10];
+        for (let bi = 0; bi < offsets.length; bi++) {
+          const off = offsets[bi] + (Math.random() - 0.5) * 18;
+          p2Lasers.push({ style: 'seeker', tier, target: ent,
+                          x0: sx0, y0: sy0, x1: tx, y1: ty,
+                          cpx: midX + px * off, cpy: midY + py * off,
+                          born: now + bi * 30, dur: 210 });
+        }
+      }
+    } else if (tier === 2) {
+      ent.state = 'shot';
+      p2Lasers.push({ side: 0, tier, x1: ent.x, y1: ent.y, born: now });
+      p2Lasers.push({ side: 1, tier, x1: ent.x, y1: ent.y, born: now });
+    } else {
+      ent.state = 'shot';
+      const side = lastP2Gun;
+      lastP2Gun = 1 - lastP2Gun;
+      p2Lasers.push({ side, tier, x1: ent.x, y1: ent.y, born: now });
+    }
+    if (!seekerFire) {
+      const ps = [];
+      const n = 10 + Math.floor(Math.random() * 6);
+      for (let i = 0; i < n; i++) {
+        const a = (Math.PI * 2 * i / n) + (Math.random() - 0.5) * 0.5;
+        const s = 0.06 + Math.random() * 0.14;
+        const palettes = ['255,60,30', '255,130,40', '255,200,70', '255,255,180'];
+        ps.push({ x: ent.x, y: ent.y, vx: Math.cos(a)*s, vy: Math.sin(a)*s,
+                  r: 1.5 + Math.random() * 2.5, col: palettes[Math.floor(Math.random() * 4)] });
+      }
+      explosions.push({ ps, born: performance.now(), dur: 680 });
+    }
+  }
+
   function initWarpOut(nextShip) {
     warpNextShip = nextShip;
     warpState = 'out';
@@ -378,6 +509,59 @@
     if (queue.length > 0 && t - lastSpawn > spawnRate) {
       spawnEntity(queue.shift());
       lastSpawn = t;
+    }
+
+    if (twoPlayerMode !== 'off') {
+      const p2Rate = p2Queue.length > 10 ? 70 : 130;
+      if (p2Queue.length > 0 && t - lastP2Spawn > p2Rate) {
+        spawnP2Entity(p2Queue.shift());
+        lastP2Spawn = t;
+      }
+      // P2 entity movement + AI
+      for (let i = p2Entities.length - 1; i >= 0; i--) {
+        const e = p2Entities[i];
+        const age = t - e.spawnTime;
+        e.x += e.vx * dt;
+        e.y += e.vy * dt;
+        if (e.type === 'blocked') {
+          e.x += Math.sin(e.wobble + age * 0.002) * 0.012 * dt;
+          if (_p2ShipVisible && warpState === 'none') {
+            if (e.state === 'alive' && age > 2200 && t - e.appearAt > 600) { e.state = 'targeted'; e.targetedAt = t; }
+            if (e.state === 'targeted' && age > 3400 && t - e.appearAt > 600) fireAtP2(e);
+          } else if (e.state === 'targeted') {
+            e.state = 'alive';
+          }
+          if (e.state === 'seeker-incoming' && t >= e.detonateAt) {
+            e.state = 'shot';
+            e.killedBy = Math.min(e.count, 3);
+          }
+          if (e.state === 'shot') {
+            const tier = Math.min(e.count, 3);
+            const bmp = tier >= 3 ? E3 : tier === 2 ? E2 : (e.design === 0 ? E0 : E1);
+            const color = tier >= 3 ? `rgba(190,60,255,0.9)` : tier === 2 ? `rgba(255,130,30,0.9)` : `rgba(255,50,50,0.9)`;
+            createExplosionFromBmp(bmp, e.x, e.y, e.killedBy, color);
+            p2Entities.splice(i, 1); continue;
+          }
+          if (e.y > H + 80) { p2Entities.splice(i, 1); continue; }
+        } else {
+          e.labelAlpha = Math.max(0, 1 - (age - 2400) / 1000);
+          if (e.x < W / 2 - 50 || e.x > W + 130 || e.y > H + 80) {
+            p2Entities.splice(i, 1);
+          }
+        }
+      }
+      // P2 ship movement: drop in, passive drift, track targeted enemy
+      const _p2targeted = p2Entities.find(e => e.state === 'targeted');
+      const _p2ActiveEnemies = p2Entities.filter(e => e.type === 'blocked' && e.state !== 'shot').length;
+      const _p2PassiveDrift = 5 * Math.sin(t * 0.00038 + Math.PI) + 2 * Math.sin(t * 0.00067 + Math.PI);
+      const _p2FreeCX = W * 3 / 4;
+      const _p2GoalX = _p2ShipVisible
+        ? (_p2targeted ? _p2FreeCX + Math.max(-80, Math.min(80, _p2targeted.x - _p2FreeCX)) : _p2FreeCX + _p2PassiveDrift)
+        : _p2FreeCX;
+      const _p2GoalY = _p2ShipVisible ? H * 0.65 + (_p2ActiveEnemies > 0 ? -42 : 0) : -300;
+      const _p2LerpY = _p2GoalY > p2ShipY + 10 ? 0.009 : 0.0008;
+      p2ShipX += (_p2GoalX - p2ShipX) * Math.min(1, 0.0038 * dt);
+      p2ShipY += (_p2GoalY - p2ShipY) * Math.min(1, _p2LerpY * dt);
     }
 
     for (let i = entities.length - 1; i >= 0; i--) {
@@ -437,6 +621,22 @@
         }
       }
     }
+    // P2 laser collision
+    if (twoPlayerMode !== 'off') {
+      for (let i = p2Lasers.length - 1; i >= 0; i--) {
+        const l = p2Lasers[i];
+        if (t < l.born) continue;
+        if (l.style === 'seeker') continue;
+        for (const e of p2Entities) {
+          if (e.state === 'alive' && Math.hypot(e.x - l.x1, e.y - l.y1) < 25) {
+            e.state = 'shot';
+            e.killedBy = l.tier;
+            p2Lasers.splice(i, 1);
+            break;
+          }
+        }
+      }
+    }
     // Ship movement - passive hover drift + idle wander; track targeted enemy
     activeEnemies = 0;
     for (const e of entities) {
@@ -447,16 +647,21 @@
     const passiveDrift = 5 * Math.sin(t * 0.00038) + 2 * Math.sin(t * 0.00067);
     const idleDrift = idleBlend * 26 * Math.sin(t * 0.00021);
     const targeted = entities.find(e => e.state === 'targeted');
-    const _carrierCX = W * 0.40;
+    const _carrierTargetX = twoPlayerMode !== 'off' ? W * 0.20 : W * 0.40;
+    _carrierSmoothX += (_carrierTargetX - _carrierSmoothX) * Math.min(1, 0.003 * dt);
+    const _carrierCX = _carrierSmoothX;
     const _shipBayIdx = CARRIER_SHIP_ORDER.indexOf(currentShip);
     const _activeBayX = _carrierCX + (_shipBayIdx >= 0 ? CARRIER_BAY_DX[_shipBayIdx] : 0);
+    const _freeCX = twoPlayerMode !== 'off' ? W / 4 : W / 2;
     let goalX, goalXLerp;
-    if (carrierState === 'arriving' || carrierState === 'present') {
+    if (carrierState === 'arriving') {
       goalX = _activeBayX; goalXLerp = 0.002;
+    } else if (carrierState === 'present') {
+      goalX = _activeBayX; goalXLerp = 1; // glued -- exact tracking, no lag
     } else if (carrierState === 'leaving' && t - launchAt < LAUNCH_BOOST_DUR) {
       goalX = _activeBayX; goalXLerp = 0.0015;
     } else {
-      goalX = targeted ? W / 2 + Math.max(-110, Math.min(110, targeted.x - W / 2)) : W / 2 + passiveDrift + idleDrift;
+      goalX = targeted ? _freeCX + Math.max(-80, Math.min(80, targeted.x - _freeCX)) : _freeCX + passiveDrift + idleDrift;
       goalXLerp = 0.0038;
     }
     shipX += (goalX - shipX) * Math.min(1, goalXLerp * dt);
@@ -679,6 +884,10 @@
       const _l = lasers[i];
       if (t - _l.born > (_l.style === 'seeker' ? _l.dur + 60 : 300)) lasers.splice(i, 1);
     }
+    for (let i = p2Lasers.length - 1; i >= 0; i--) {
+      const _l = p2Lasers[i];
+      if (t - _l.born > (_l.style === 'seeker' ? _l.dur + 60 : 300)) p2Lasers.splice(i, 1);
+    }
 
     for (let i = explosions.length - 1; i >= 0; i--) {
       const ex = explosions[i];
@@ -705,6 +914,12 @@
     if (warpState === 'out' && t - warpAt >= WARP_OUT_DUR) {
       currentShip = warpNextShip; warpNextShip = null;
       sessionStorage.setItem('ph_ship', currentShip);
+      if (twoPlayerMode === 'local') p2CurrentShip = currentShip;
+      if (twoPlayerMode === 'remote' && relayWs && relayWs.readyState === 1 && relayState === 'connected') {
+        _encryptMsg({ type: 'ship', ship: currentShip })
+          .then(buf => { if (relayWs && relayWs.readyState === 1) relayWs.send(buf); })
+          .catch(() => {});
+      }
       warpState = 'in'; warpAt = t;
       for (const c of crewMembers) { if (c.state !== 'fleeing') { c.state = 'fleeing'; c.stateAt = t; c.wpIdx = 0; c.fromX = c.x; c.fromY = c.y; } }
     } else if (warpState === 'in' && t - warpAt >= WARP_IN_DUR) {
@@ -857,6 +1072,24 @@
     // End shake translate - entities get warp-blast distortion instead of shaking
     if (shakeOn) { ctx.restore(); shakeOn = false; }
 
+    // ── 2P vertical divider ───────────────────────────────────────────
+    if (twoPlayerMode !== 'off') {
+      const _divAge = _2pDividerAt > 0 ? t - _2pDividerAt : 99999;
+      const _divFlash = Math.max(0, 1 - _divAge / 600);
+      const _divAlpha = 0.14 + _divFlash * 0.70;
+      const _divW = 1 + _divFlash * 2;
+      const _divGlow = _divFlash > 0.02;
+      ctx.save();
+      ctx.globalAlpha = _divAlpha;
+      ctx.strokeStyle = 'rgba(140,160,175,1)';
+      ctx.lineWidth = _divW;
+      ctx.setLineDash(_divFlash < 0.05 ? [4, 8] : []);
+      if (_divGlow) { ctx.shadowColor = 'rgba(140,200,255,0.7)'; ctx.shadowBlur = 12 * _divFlash; }
+      ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H - hudSH - safeBottom); ctx.stroke();
+      ctx.setLineDash([]); ctx.shadowBlur = 0;
+      ctx.restore();
+    }
+
     // Ship-position-based warp distortion: Gaussian bell centered on ship's current Y
     let warpFrontY = null;
     if (warpState === 'out') {
@@ -867,7 +1100,7 @@
 
     // ── Carrier ship ──────────────────────────────────────────────────────
     if (carrierState !== 'none') {
-      const ccx = Math.round(W * 0.40);
+      const ccx = Math.round(_carrierSmoothX);
       const ccy = Math.round(carrierY);
       const _cFade = carrierState === 'arriving'
         ? Math.min(1, (t - carrierArrivingAt) / 700)
@@ -1218,7 +1451,7 @@
 
         const _sp = getCachedSprite(bmp, colFull, glow, EPX);
         ctx.globalAlpha = alpha * pulse;
-        ctx.drawImage(_sp.canvas, -_sp.w / 2, -_sp.h / 2);
+        ctx.drawImage(_sp.bitmap, -_sp.w / 2, -_sp.h / 2);
         ctx.globalAlpha = alpha;
 
         // Targeting reticle
@@ -1272,7 +1505,7 @@
         ctx.rotate(Math.atan2(e.vy, e.vx) + Math.PI / 2);
         const _sp = getCachedSprite(bmp, color, glow, EPX - 1);
         ctx.imageSmoothingEnabled = true;
-        ctx.drawImage(_sp.canvas, -_sp.w / 2, -_sp.h / 2);
+        ctx.drawImage(_sp.bitmap, -_sp.w / 2, -_sp.h / 2);
         ctx.imageSmoothingEnabled = false;
         ctx.restore();
       }
@@ -1307,6 +1540,77 @@
         }
         ctx.restore();
       }
+    }
+
+    // ── P2 entities (right half, cosmetic) ───────────────────────────
+    if (twoPlayerMode !== 'off' && p2Entities.length > 0) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(W / 2, 0, W / 2, H - hudSH - safeBottom); ctx.clip();
+      ctx.font = '12px "IBM Plex Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.imageSmoothingEnabled = false;
+      for (const e of p2Entities) {
+        const age = t - e.spawnTime;
+        const alpha = Math.min(1, (t - e.appearAt) / 400) * 0.80;
+        if (alpha < 0.02) continue;
+        const EPX = PX;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        if (e.type === 'blocked') {
+          const tier = Math.min(e.count, 3);
+          const bmp = tier >= 3 ? E3 : tier === 2 ? E2 : (e.design === 0 ? E0 : E1);
+          const pulse = 0.75 + 0.25 * Math.sin(age * 0.005);
+          const [colFull, glow] = tier >= 3
+            ? ['rgba(190,60,255,1)', 'rgba(190,60,255,0.35)']
+            : tier === 2
+            ? ['rgba(255,130,30,1)', 'rgba(255,130,30,0.35)']
+            : ['rgba(255,50,50,1)', 'rgba(255,60,40,0.35)'];
+          const _sp = getCachedSprite(bmp, colFull, glow, EPX);
+          ctx.globalAlpha = alpha * pulse;
+          ctx.save(); ctx.translate(e.x, e.y);
+          ctx.drawImage(_sp.bitmap, -_sp.w / 2, -_sp.h / 2);
+          ctx.restore();
+          ctx.globalAlpha = alpha;
+        } else {
+          const tier = Math.min(e.count, 3);
+          const bmp = tier >= 3 ? F4 : tier === 2 ? F3 : [F0, F1, F2][e.design % 3];
+          const [color, glow] = tier >= 3
+            ? ['rgba(205,170,75,0.72)', 'rgba(205,170,75,0.2)']
+            : tier === 2
+            ? ['rgba(100,220,255,0.72)', 'rgba(100,220,255,0.2)']
+            : [['rgba(50,215,120,0.72)','rgba(80,175,255,0.72)','rgba(175,220,70,0.72)'][e.design % 3],
+               ['rgba(50,215,120,0.2)','rgba(80,175,255,0.2)','rgba(175,220,70,0.2)'][e.design % 3]];
+          ctx.save();
+          ctx.translate(e.x, e.y);
+          ctx.rotate(Math.atan2(e.vy, e.vx) + Math.PI / 2);
+          const _sp = getCachedSprite(bmp, color, glow, EPX - 1);
+          ctx.imageSmoothingEnabled = true;
+          ctx.drawImage(_sp.bitmap, -_sp.w / 2, -_sp.h / 2);
+          ctx.imageSmoothingEnabled = false;
+          ctx.restore();
+        }
+        ctx.restore();
+        if (showDomain) {
+          const la = e.type === 'blocked' ? alpha : e.labelAlpha * alpha;
+          if (la > 0.02) {
+            const tier = Math.min(e.count, 3);
+            const lbmp = e.type === 'blocked'
+              ? (tier >= 3 ? E3 : tier === 2 ? E2 : (e.design === 0 ? E0 : E1))
+              : (tier >= 3 ? F4 : tier === 2 ? F3 : [F0, F1, F2][e.design % 3]);
+            const baseY = e.y + (bmpH(lbmp) * EPX / 2) + 13;
+            ctx.save(); ctx.globalAlpha = la * 0.85;
+            if (e.type === 'blocked') {
+              ctx.fillStyle = tier >= 3 ? 'rgba(200,100,255,1)' : tier === 2 ? 'rgba(255,160,60,1)' : 'rgba(255,120,100,1)';
+            } else {
+              ctx.fillStyle = 'rgba(150,230,175,0.72)';
+            }
+            const dom = e.domain.length > 26 ? '…' + e.domain.slice(-24) : e.domain;
+            ctx.fillText(dom, e.x, baseY);
+            ctx.restore();
+          }
+        }
+      }
+      ctx.restore();
     }
 
     // Explosions
@@ -1369,6 +1673,7 @@
     const gtp = shipGunTipPos(currentShip, cx, cy);
 
     // Laser lines - before ship so hull covers the origin end
+    if (twoPlayerMode !== 'off') { ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W / 2, H); ctx.clip(); }
     for (const l of lasers) {
       if (l.style === 'seeker') {
         const age = t - l.born;
@@ -1449,6 +1754,79 @@
         ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(l.x1, l.y1); ctx.stroke();
         ctx.restore();
       }
+    }
+    if (twoPlayerMode !== 'off') ctx.restore();
+
+    // P2 laser lines (right half, clipped)
+    if (twoPlayerMode !== 'off' && p2Lasers.length > 0) {
+      const _p2cx_l = Math.round(p2ShipX);
+      const _p2cy_l = Math.round(p2ShipY + 2.5 * Math.sin(t * 0.00055 + Math.PI));
+      const gtp2 = shipGunTipPos(p2CurrentShip, _p2cx_l, _p2cy_l);
+      ctx.save(); ctx.beginPath(); ctx.rect(W / 2, 0, W / 2, H); ctx.clip();
+      for (const l of p2Lasers) {
+        if (l.style === 'seeker') {
+          const age = t - l.born;
+          if (age < 0 || age > l.dur + 60) continue;
+          const prog = Math.min(1, age / l.dur);
+          const inv = 1 - prog;
+          const odx = gtp2.nx - l.x0, ody = gtp2.ny - l.y0;
+          const ox = l.x0 + odx, oy = l.y0 + ody;
+          const cpx = l.cpx + odx, cpy = l.cpy + ody;
+          const ex1 = l.target && l.target.state === 'seeker-incoming' ? l.target.x : l.x1;
+          const ey1 = l.target && l.target.state === 'seeker-incoming' ? l.target.y : l.y1;
+          const bx = inv*inv*ox + 2*inv*prog*cpx + prog*prog*ex1;
+          const by = inv*inv*oy + 2*inv*prog*cpy + prog*prog*ey1;
+          const tp = Math.max(0, prog - 0.28);
+          const tinv = 1 - tp;
+          const trx = tinv*tinv*ox + 2*tinv*tp*cpx + tp*tp*ex1;
+          const trY = tinv*tinv*oy + 2*tinv*tp*cpy + tp*tp*ey1;
+          const inFlight = age <= l.dur;
+          const alpha = Math.min(1, age / (l.dur * 0.12));
+          const impactF = inFlight ? 0 : Math.max(0, 1 - (age - l.dur) / 55);
+          const approachF = inFlight ? Math.max(0, (prog - 0.80) / 0.20) : 1;
+          const headR = 5 + approachF * 7;
+          ctx.save();
+          ctx.globalAlpha = alpha;
+          if (inFlight) {
+            ctx.strokeStyle = 'rgba(255,180,20,0.45)'; ctx.lineWidth = 5;
+            ctx.shadowColor = 'rgba(255,160,0,0.6)'; ctx.shadowBlur = 18;
+            ctx.beginPath(); ctx.moveTo(trx, trY); ctx.lineTo(bx, by); ctx.stroke();
+            ctx.strokeStyle = '#ffee66'; ctx.lineWidth = 2;
+            ctx.shadowColor = 'rgba(255,220,60,0.9)'; ctx.shadowBlur = 10;
+            ctx.beginPath(); ctx.moveTo(trx, trY); ctx.lineTo(bx, by); ctx.stroke();
+          }
+          ctx.globalAlpha = inFlight ? alpha : impactF;
+          ctx.fillStyle = 'rgba(255,200,60,0.85)';
+          ctx.shadowColor = 'rgba(255,180,0,0.9)'; ctx.shadowBlur = 22 + approachF * 24;
+          ctx.beginPath(); ctx.arc(bx, by, headR, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = 'rgba(255,255,220,1)'; ctx.shadowBlur = 8;
+          ctx.beginPath(); ctx.arc(bx, by, inFlight ? 2.5 : 4, 0, Math.PI * 2); ctx.fill();
+          if (!inFlight) {
+            const ringR = 6 + (1 - impactF) * 26;
+            ctx.strokeStyle = 'rgba(255,230,100,0.9)'; ctx.lineWidth = 1.5;
+            ctx.shadowColor = 'rgba(255,200,40,0.8)'; ctx.shadowBlur = 12;
+            ctx.globalAlpha = impactF * 0.85;
+            ctx.beginPath(); ctx.arc(bx, by, ringR, 0, Math.PI * 2); ctx.stroke();
+          }
+          ctx.restore();
+        } else {
+          const a = Math.max(0, 1 - (t - l.born) / 300);
+          const sx = l.side === 2 ? gtp2.nx : l.side === 1 ? gtp2.rx : gtp2.lx;
+          const sy = l.side === 2 ? gtp2.ny : gtp2.gy;
+          const [lCol, lGlow] = l.tier >= 3
+            ? ['#ffdd44', 'rgba(255,200,40,0.8)']
+            : l.tier === 2
+            ? ['#00ddff', 'rgba(0,200,255,0.8)']
+            : ['#4fffaa', 'rgba(80,255,160,0.8)'];
+          ctx.save();
+          ctx.globalAlpha = a;
+          ctx.strokeStyle = lCol; ctx.lineWidth = 2;
+          ctx.shadowColor = lGlow; ctx.shadowBlur = 10;
+          ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(l.x1, l.y1); ctx.stroke();
+          ctx.restore();
+        }
+      }
+      ctx.restore();
     }
 
     // Drone missiles (traveling) and sprite (rotated toward target)
@@ -1826,6 +2204,122 @@
       }
     }
 
+    // ── P2 ship + status (right half) ────────────────────────
+    if (twoPlayerMode !== 'off') {
+      const _p2cx = Math.round(p2ShipX);
+      const _p2cy = Math.round(p2ShipY + 2.5 * Math.sin(t * 0.00055 + Math.PI));
+      const _p2cfg = _SHIP_CONFIGS[p2CurrentShip] || _SHIP_CONFIGS.protector;
+      const _p2base = _p2cy + bmpH(_p2cfg.bmp) * PX / 2 - 5;
+      const _ripAge = _p2ShipRipInAt > 0 ? t - _p2ShipRipInAt : 99999;
+
+      if (relayState === 'waiting') {
+        // "WAITING FOR PLAYER 2" pulsing
+        const _wa = 0.30 + 0.22 * Math.sin(t * 0.0022);
+        ctx.save(); ctx.globalAlpha = _wa;
+        ctx.font = '8px "Press Start 2P", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(140,160,175,1)';
+        ctx.fillText('WAITING FOR', W * 0.75, H * 0.44);
+        ctx.fillText('PLAYER 2', W * 0.75, H * 0.44 + 18);
+        ctx.restore();
+      } else if (relayState === 'timedout') {
+        const _ta = 0.30 + 0.18 * Math.sin(t * 0.0018);
+        ctx.save(); ctx.globalAlpha = _ta;
+        ctx.font = '8px "Press Start 2P", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(200,100,80,1)';
+        ctx.fillText('SESSION', W * 0.75, H * 0.42);
+        ctx.fillText('TIMED OUT', W * 0.75, H * 0.42 + 18);
+        ctx.globalAlpha = _ta * 0.7;
+        ctx.fillStyle = 'rgba(140,160,175,1)';
+        ctx.fillText('RECONNECTING...', W * 0.75, H * 0.42 + 42);
+        ctx.restore();
+      } else if (!_p2ShipVisible && twoPlayerMode === 'local') {
+        // P2 connecting in local mode
+        const _ca = 0.25 + 0.20 * Math.sin(t * 0.0025);
+        ctx.save(); ctx.globalAlpha = _ca;
+        ctx.font = '8px "Press Start 2P", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(65,165,200,1)';
+        ctx.fillText('P2', W * 0.75, H * 0.44);
+        ctx.fillText('CONNECTING', W * 0.75, H * 0.44 + 18);
+        ctx.restore();
+      }
+
+      if (p2ShipY > -250) {
+        // Descent streak during rip-in
+        if (_ripAge < 700) {
+          const _rp = _ripAge / 700;
+          for (let si = 1; si <= 5; si++) {
+            ctx.save();
+            ctx.globalAlpha = (1 - _rp) * (1 - si / 6) * 0.45;
+            drawBmp(ctx, _p2cfg.bmp, _p2cx, _p2cy - si * 15 * (1 - _rp), _p2cfg.dimColor, null, PX);
+            ctx.restore();
+          }
+        }
+
+        ctx.save();
+        ctx.globalAlpha = (_ripAge < 400 ? Math.min(1, _ripAge / 180) : 1) * 0.72;
+        drawBmp(ctx, _p2cfg.bmp, _p2cx, _p2cy, _p2cfg.color, _p2cfg.glow, PX);
+        for (const f of _p2cfg.flares) {
+          drawEngineFlare(_p2cx + f.xOff, _p2base + f.yOff, t * 0.005,
+            f.size, f.len ?? f.size, f.taper ?? 0.6, f.shape ?? 'arch', f.wobble ?? 1, f.col ?? null);
+        }
+        ctx.restore();
+
+        // "P2 ONLINE" label fades in after arrival, persists briefly
+        if (_p2ShipRipInAt > 0 && _ripAge > 350 && _ripAge < 2200) {
+          const _fa = _ripAge < 500 ? (_ripAge - 350) / 150 : Math.max(0, 1 - (_ripAge - 1800) / 400);
+          ctx.save(); ctx.globalAlpha = _fa * 0.90;
+          ctx.font = '9px "Press Start 2P", monospace';
+          ctx.textAlign = 'center';
+          ctx.fillStyle = 'rgba(50,215,120,1)';
+          ctx.shadowColor = 'rgba(50,215,120,0.55)'; ctx.shadowBlur = 10;
+          ctx.fillText('P2 ONLINE', _p2cx, _p2cy - bmpH(_p2cfg.bmp) * PX / 2 - 16);
+          ctx.shadowBlur = 0; ctx.restore();
+        }
+      }
+
+      // Arrival chain ring
+      if (_p2ShipRipInAt > 0 && _ripAge > 380 && _ripAge < 780) {
+        const _rp = (_ripAge - 380) / 400;
+        ctx.save(); ctx.globalAlpha = Math.max(0, (1 - _rp) * 0.75);
+        ctx.strokeStyle = 'rgba(50,215,120,1)';
+        ctx.lineWidth = 1.5;
+        ctx.shadowColor = 'rgba(50,215,120,0.7)'; ctx.shadowBlur = 14;
+        ctx.beginPath(); ctx.arc(_p2cx, _p2cy, 12 + _rp * 70, 0, Math.PI * 2); ctx.stroke();
+        ctx.shadowBlur = 0; ctx.restore();
+      }
+
+      // P2 mini stats (top of right half)
+      if (_p2ShipVisible || relayState === 'connected') {
+        const _p2fmt = n => n == null ? '—' : n >= 1e6 ? (n/1e6).toFixed(2)+'M' : n >= 1e4 ? (n/1e3).toFixed(2)+'K' : String(n);
+        const _p2b = _p2fmt(p2HudStats.blocked);
+        const _p2q = _p2fmt(p2HudStats.queries);
+        ctx.save(); ctx.globalAlpha = 0.55;
+        ctx.font = '7px "Press Start 2P", monospace';
+        ctx.textAlign = 'right';
+        ctx.fillStyle = p2BlockingEnabled === false ? 'rgba(255,80,60,0.65)' : 'rgba(50,215,120,0.55)';
+        ctx.fillText(`P2  ${_p2b} / ${_p2q}`, W - 8, 16);
+        ctx.restore();
+      }
+
+      // Full-width 2P activation banner (first 2.8s)
+      if (_2pBannerAt > 0) {
+        const _bAge = t - _2pBannerAt;
+        if (_bAge < 2800) {
+          const _ba = _bAge < 300 ? _bAge / 300 : _bAge > 2200 ? Math.max(0, 1 - (_bAge - 2200) / 600) : 1;
+          ctx.save(); ctx.globalAlpha = _ba * 0.92;
+          ctx.font = '11px "Press Start 2P", monospace';
+          ctx.textAlign = 'center';
+          ctx.fillStyle = 'rgba(50,215,120,1)';
+          ctx.shadowColor = 'rgba(50,215,120,0.55)'; ctx.shadowBlur = 14;
+          ctx.fillText('2-PLAYER MODE', W / 2, H * 0.28);
+          ctx.shadowBlur = 0; ctx.restore();
+        }
+      }
+    }
+
     // ── HUD Strip ────────────────────────────────────────────
     ctx.save();
     ctx.translate(shakeSx, shakeSy);
@@ -2000,7 +2494,8 @@
         { key: 'domain',     label: 'DOMAIN',     state: showDomain },
       ];
       const smw = 186, smItemH = 28, smPad = 10, smDivH = 10, smPhRowH = 34;
-      const smh = smPad + smItemH + smDivH + smItemH * 2 + smDivH + smPhRowH + smPad;
+      const _has2P = window.TWO_PLAYER_ENABLED !== false;
+      const smh = smPad + smItemH + smDivH + smItemH * 2 + (_has2P ? smDivH + smItemH : 0) + smDivH + smPhRowH + (twoPlayerMode === 'local' && window.PIHOLE2_DASHBOARD ? smPhRowH : 0) + smPad;
       const smX = 6, smY = SY - smh - 6;
       settingsMenuPopupBox = { x: smX, y: smY, w: smw, h: smh };
       ctx.fillStyle = 'rgba(8,11,16,0.92)';
@@ -2052,6 +2547,32 @@
           siy += smDivH;
         }
       }
+      if (_has2P) {
+        // Divider before 2P MODE row
+        ctx.strokeStyle = 'rgba(140,160,175,0.14)'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(smX + 10, siy + smDivH / 2); ctx.lineTo(smX + smw - 10, siy + smDivH / 2);
+        ctx.stroke();
+        siy += smDivH;
+        // 2P MODE row
+        {
+          const tpHb = { x: smX, y: siy, w: smw, h: smItemH };
+          const tpHov = mouseX >= tpHb.x && mouseX <= tpHb.x + tpHb.w && mouseY >= tpHb.y && mouseY <= tpHb.y + tpHb.h;
+          if (tpHov) { ctx.fillStyle = 'rgba(140,160,175,0.08)'; ctx.fillRect(tpHb.x, tpHb.y, tpHb.w, tpHb.h); }
+          ctx.textAlign = 'left';
+          ctx.font = `${_fSub}px "Press Start 2P", monospace`;
+          ctx.fillStyle = tpHov ? 'rgba(215,225,248,0.95)' : 'rgba(175,200,238,0.55)';
+          ctx.fillText('2P MODE', smX + 12, siy + 19);
+          const _tpAx = smX + smw - 14, _tpAy = siy + smItemH / 2;
+          ctx.strokeStyle = tpHov ? 'rgba(215,225,248,0.70)' : 'rgba(140,160,175,0.32)';
+          ctx.lineWidth = 1.5; ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(_tpAx - 4, _tpAy - 4); ctx.lineTo(_tpAx + 4, _tpAy); ctx.lineTo(_tpAx - 4, _tpAy + 4);
+          ctx.stroke();
+          settingsMenuItems.push({ key: '2p-mode', hitbox: tpHb });
+          siy += smItemH;
+        }
+      }
       // Divider before pihole row
       ctx.strokeStyle = 'rgba(140,160,175,0.14)'; ctx.lineWidth = 1;
       ctx.beginPath();
@@ -2087,6 +2608,34 @@
         ctx.moveTo(_ax - 1, _ay - 4); ctx.lineTo(_ax + 4, _ay - 4); ctx.lineTo(_ax + 4, _ay + 1);
         ctx.stroke();
         settingsMenuItems.push({ key: 'pihole-link', hitbox: phHb });
+        siy += smPhRowH;
+        // PI-HOLE 2 admin link (local 2P mode only)
+        if (twoPlayerMode === 'local' && window.PIHOLE2_DASHBOARD) {
+          const ph2Hb = { x: smX, y: siy, w: smw, h: smPhRowH };
+          const ph2Hov = mouseX >= ph2Hb.x && mouseX <= ph2Hb.x + ph2Hb.w && mouseY >= ph2Hb.y && mouseY <= ph2Hb.y + ph2Hb.h;
+          ctx.strokeStyle = 'rgba(140,160,175,0.10)'; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(smX + 30, siy + 0.5); ctx.lineTo(smX + smw - 10, siy + 0.5); ctx.stroke();
+          if (ph2Hov) { ctx.fillStyle = 'rgba(140,160,175,0.08)'; ctx.fillRect(ph2Hb.x, ph2Hb.y, ph2Hb.w, ph2Hb.h); }
+          const _icon2H = smPhRowH - 8, _icon2W = Math.round(_icon2H * (90 / 130));
+          const _icon2X = smX + 12, _icon2Y = siy + (smPhRowH - _icon2H) / 2;
+          if (_phIcon.complete && _phIcon.naturalWidth > 0) {
+            ctx.save(); ctx.globalAlpha = ph2Hov ? 0.88 : 0.45;
+            ctx.drawImage(_phIcon, _icon2X, _icon2Y, _icon2W, _icon2H);
+            ctx.restore();
+          }
+          ctx.textAlign = 'left';
+          ctx.font = `${_fSub}px "Press Start 2P", monospace`;
+          ctx.fillStyle = ph2Hov ? 'rgba(215,225,248,0.95)' : 'rgba(175,200,238,0.55)';
+          ctx.fillText('PI-HOLE 2', _icon2X + _icon2W + 12, siy + smPhRowH / 2 + 6);
+          const _a2x = smX + smw - 14, _a2y = siy + smPhRowH / 2;
+          ctx.strokeStyle = ph2Hov ? 'rgba(215,225,248,0.70)' : 'rgba(140,160,175,0.32)';
+          ctx.lineWidth = 1.5; ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(_a2x - 5, _a2y + 4); ctx.lineTo(_a2x + 4, _a2y - 4);
+          ctx.moveTo(_a2x - 1, _a2y - 4); ctx.lineTo(_a2x + 4, _a2y - 4); ctx.lineTo(_a2x + 4, _a2y + 1);
+          ctx.stroke();
+          settingsMenuItems.push({ key: 'pihole-link-2', hitbox: ph2Hb });
+        }
       }
     } else {
       settingsMenuItems = [];
@@ -2315,7 +2864,15 @@
     evtSource.onmessage = e => {
       try {
         const evts = JSON.parse(e.data);
-        if (Array.isArray(evts)) queue.push(...evts);
+        if (Array.isArray(evts)) {
+          queue.push(...evts);
+          if (twoPlayerMode === 'remote' && relayWs && relayWs.readyState === 1 && relayState === 'connected') {
+            const stripped = evts.map(ev => ({ status: ev.status, source: ev.source }));
+            _encryptMsg({ type: 'events', events: stripped })
+              .then(buf => { if (buf && relayWs && relayWs.readyState === 1) relayWs.send(buf); })
+              .catch(() => {});
+          }
+        }
       } catch {}
     };
     evtSource.onerror = () => {
@@ -2325,10 +2882,167 @@
     };
   }
 
+  // ── 2P crypto (AES-256-GCM via Web Crypto) ───────────────────────
+  async function _importRelayKey(keyStr) {
+    const raw = new TextEncoder().encode(keyStr);
+    const hash = await crypto.subtle.digest('SHA-256', raw);
+    return crypto.subtle.importKey('raw', hash, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+  }
+
+  async function _encryptMsg(obj) {
+    if (!_relayKey) return null;
+    const nonce = crypto.getRandomValues(new Uint8Array(12));
+    const plain = new TextEncoder().encode(JSON.stringify(obj));
+    const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce }, _relayKey, plain);
+    const out = new Uint8Array(12 + cipher.byteLength);
+    out.set(nonce, 0);
+    out.set(new Uint8Array(cipher), 12);
+    return out.buffer;
+  }
+
+  async function _decryptMsg(buf) {
+    if (!_relayKey) return null;
+    const nonce = new Uint8Array(buf, 0, 12);
+    const cipher = new Uint8Array(buf, 12);
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: nonce }, _relayKey, cipher);
+    return JSON.parse(new TextDecoder().decode(plain));
+  }
+
+  // ── 2P connection management ──────────────────────────────────────
+  function _p2Reveal() {
+    if (_p2ShipVisible) return;
+    _p2ShipVisible = true;
+    _p2ShipRipInAt = performance.now();
+    if (twoPlayerMode === 'local') p2CurrentShip = currentShip;
+  }
+
+  function _disconnectP2() {
+    if (p2EvtSource) { p2EvtSource.close(); p2EvtSource = null; }
+    if (relayWs) { relayWs.close(); relayWs = null; }
+    if (p2StatsPollTimer) { clearInterval(p2StatsPollTimer); p2StatsPollTimer = null; }
+    relayState = 'off';
+    _relayKey = null;
+    _p2ShipVisible = false;
+    _p2ShipRipInAt = 0;
+    p2Queue.length = 0;
+    p2Entities.length = 0;
+    p2Lasers.length = 0;
+    p2HudStats = { blocked: null, queries: null, percent: null };
+    p2BlockingEnabled = null;
+  }
+
+  function _connectP2Local() {
+    _disconnectP2();
+    p2ShipX = W * 3 / 4;
+    p2ShipY = -300;
+    relayState = 'connected';
+
+    function fetchP2Stats() {
+      fetch('/api/pihole2/stats', { signal: AbortSignal.timeout(1800) })
+        .then(r => r.json())
+        .then(d => {
+          if (d.blocked != null) p2HudStats.blocked = d.blocked;
+          if (d.queries != null) p2HudStats.queries = d.queries;
+          if (d.percent != null) p2HudStats.percent = d.percent;
+          if (d.blocking != null) p2BlockingEnabled = d.blocking;
+          if (!_p2ShipVisible && (d.blocked != null || d.queries != null)) _p2Reveal();
+        }).catch(() => {});
+    }
+    fetchP2Stats();
+    p2StatsPollTimer = setInterval(fetchP2Stats, 1000);
+
+    p2EvtSource = new EventSource('/api/pihole2/events');
+    p2EvtSource.onmessage = e => {
+      try {
+        const evts = JSON.parse(e.data);
+        if (Array.isArray(evts)) {
+          p2Queue.push(...evts);
+          if (!_p2ShipVisible) _p2Reveal();
+        }
+      } catch {}
+    };
+    p2EvtSource.onerror = () => {};
+  }
+
+  async function _connectP2Remote(relayUrl, keyStr) {
+    _disconnectP2();
+    p2ShipX = W * 3 / 4;
+    p2ShipY = -300;
+    try { _relayKey = await _importRelayKey(keyStr); } catch { return; }
+    relayState = 'connecting';
+    const ws = new WebSocket(relayUrl);
+    ws.binaryType = 'arraybuffer';
+    relayWs = ws;
+
+    ws.onmessage = async e => {
+      if (typeof e.data === 'string') {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'waiting') {
+            relayState = 'waiting';
+          } else if (msg.type === 'connected') {
+            relayState = 'connected';
+            _p2Reveal();
+          } else if (msg.type === 'partner_disconnected') {
+            relayState = 'waiting';
+            _p2ShipVisible = false; _p2ShipRipInAt = 0;
+            p2Queue.length = 0; p2Entities.length = 0; p2Lasers.length = 0;
+          } else if (msg.type === 'timeout') {
+            _disconnectP2();
+            relayState = 'timedout';
+            setTimeout(() => { if (relayState === 'timedout') _init2P(); }, 4000);
+          }
+        } catch {}
+        return;
+      }
+      try {
+        const msg = await _decryptMsg(e.data);
+        if (!msg) return;
+        if (msg.type === 'events' && Array.isArray(msg.events)) {
+          p2Queue.push(...msg.events);
+        } else if (msg.type === 'stats') {
+          if (msg.blocked != null) p2HudStats.blocked = msg.blocked;
+          if (msg.queries != null) p2HudStats.queries = msg.queries;
+          if (msg.percent != null) p2HudStats.percent = msg.percent;
+          if (msg.blocking != null) p2BlockingEnabled = msg.blocking;
+        } else if (msg.type === 'ship' && _SHIP_CONFIGS[msg.ship]) {
+          p2CurrentShip = msg.ship;
+        }
+      } catch {}
+    };
+    ws.onerror = () => {};
+    ws.onclose = () => { if (relayWs === ws) { relayWs = null; relayState = 'off'; } };
+  }
+
+  async function _init2P() {
+    try {
+      const s = await fetch('/api/2p/status', { signal: AbortSignal.timeout(1800) }).then(r => r.json());
+      const newMode = s.mode || 'off';
+      const wasOff = twoPlayerMode === 'off';
+      twoPlayerMode = newMode;
+      if (newMode === 'local') {
+        _connectP2Local();
+        p2ShipX = W * 3 / 4;
+        if (wasOff) { _2pBannerAt = performance.now(); _2pDividerAt = performance.now(); }
+      } else if (newMode === 'remote' && s.relay_url && s.session_key_full) {
+        _connectP2Remote(s.relay_url, s.session_key_full);
+        p2ShipX = W * 3 / 4;
+        if (wasOff) { _2pBannerAt = performance.now(); _2pDividerAt = performance.now(); }
+      } else {
+        twoPlayerMode = 'off';
+        // carrier and ship lerp back smoothly via physics
+      }
+    } catch {}
+  }
+
   function resize() {
     safeBottom = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sab')) || 0;
     W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight;
-    shipX = W / 2; shipY = (H - safeBottom) * 0.65;
+    _carrierSmoothX = twoPlayerMode !== 'off' ? W * 0.20 : W * 0.40;
+    shipX = twoPlayerMode !== 'off' ? W / 4 : W / 2;
+    shipY = (H - safeBottom) * 0.65;
+    p2ShipX = W * 3 / 4;
+    if (_p2ShipVisible) p2ShipY = (H - safeBottom) * 0.65;
     hudSH = W < 480 ? 84 : W < 660 ? 94 : 108;
     if (settingsBtnEl) settingsBtnEl.style.bottom = Math.round(hudSH / 2 - 10 + safeBottom) + 'px';
   }
@@ -2348,6 +3062,7 @@
     document.body.classList.add('pihole-mode');
     if (window._startZenFade) window._startZenFade(true);
     entities.length = 0; lasers.length = 0; explosions.length = 0; queue.length = 0;
+    p2Entities.length = 0; p2Lasers.length = 0; p2Queue.length = 0;
     domainFragments.length = 0; debris.length = 0; chainRings.length = 0;
     drone.state = 'docked'; drone.x = 0; drone.y = 0; drone.lastFire = 0;
     drone.side = 0; drone.angle = 0; drone.targetX = null; drone.targetY = null;
@@ -2386,7 +3101,7 @@
         carrierRestY = H * 0.78;
         carrierY = carrierRestY;
         carrierState = 'present';
-        { const _bi = CARRIER_SHIP_ORDER.indexOf(currentShip); shipX = W * 0.40 + (_bi >= 0 ? CARRIER_BAY_DX[_bi] : 0); shipY = carrierRestY + (_bi >= 0 ? CARRIER_BAY_DY[_bi] : 0); }
+        { const _bi = CARRIER_SHIP_ORDER.indexOf(currentShip); shipX = _carrierSmoothX + (_bi >= 0 ? CARRIER_BAY_DX[_bi] : 0); shipY = carrierRestY + (_bi >= 0 ? CARRIER_BAY_DY[_bi] : 0); }
         _firstEnterFetch = false;
       } else {
         sessionStorage.removeItem('ph_block_timer');
@@ -2419,7 +3134,7 @@
               carrierRestY = H * 0.78;
               carrierY = carrierRestY;
               carrierState = 'present';
-              { const _bi = CARRIER_SHIP_ORDER.indexOf(currentShip); shipX = W * 0.40 + (_bi >= 0 ? CARRIER_BAY_DX[_bi] : 0); shipY = carrierRestY + (_bi >= 0 ? CARRIER_BAY_DY[_bi] : 0); }
+              { const _bi = CARRIER_SHIP_ORDER.indexOf(currentShip); shipX = _carrierSmoothX + (_bi >= 0 ? CARRIER_BAY_DX[_bi] : 0); shipY = carrierRestY + (_bi >= 0 ? CARRIER_BAY_DY[_bi] : 0); }
             } else if (!_wasFirst && shipPowerState === 'up') {
               shipPowerState = 'down';
               if (shipQuote) shipQuote.shownAt = performance.now() - 3000;
@@ -2440,6 +3155,11 @@
         if (d.blocked != null) hudStats.blocked = d.blocked;
         if (d.queries != null) hudStats.queries = d.queries;
         if (d.percent != null) hudStats.percent = d.percent;
+        if (twoPlayerMode === 'remote' && relayWs && relayWs.readyState === 1 && relayState === 'connected') {
+          _encryptMsg({ type: 'stats', blocked: d.blocked, queries: d.queries, percent: d.percent, blocking: d.blocking })
+            .then(buf => { if (buf && relayWs && relayWs.readyState === 1) relayWs.send(buf); })
+            .catch(() => {});
+        }
       }).catch(() => {});
     }
     if (settingsBtnEl) settingsBtnEl.style.display = 'block';
@@ -2478,6 +3198,7 @@
       _sleepCheckLast = now;
     }, 4000);
     connect();
+    if (window.TWO_PLAYER_ENABLED !== false) _init2P();
     requestAnimationFrame(t => {
       lastT = t; lastSpawn = t;
       canvas.style.opacity = '1';  // triggers the 0.6s transition after first paint
@@ -2487,6 +3208,9 @@
 
   window.exitPiholeMode = function() {
     if (!active) return;
+    if (window.close2PModal) window.close2PModal();
+    _disconnectP2();
+    twoPlayerMode = 'off'; _2pBannerAt = 0; _2pDividerAt = 0;
     canvas.style.opacity = '0';
     canvas.style.zIndex = '1';    // drop below dashboard so it fades under, not over
     document.body.classList.remove('pihole-mode');
@@ -2512,6 +3236,7 @@
       shipPowerState = 'up'; gunCheckState = 0; lastEnemyAt = 0;
       carrierState = 'none'; carrierY = 0; carrierRestY = 0;
       entities.length = 0; lasers.length = 0; explosions.length = 0; queue.length = 0;
+      p2Entities.length = 0; p2Lasers.length = 0; p2Queue.length = 0;
       domainFragments.length = 0; debris.length = 0; chainRings.length = 0;
       drone.state = 'docked'; drone.angle = 0; drone.targetX = null; drone.targetY = null;
       drone.deployedAt = 0; drone.recallAt = 0;
@@ -2619,9 +3344,20 @@
           if      (item.key === 'friendlies')  { showFriendlies = !showFriendlies; _saveDisplaySettings(); }
           else if (item.key === 'domain')      { showDomain     = !showDomain;     _saveDisplaySettings(); }
           else if (item.key === 'client')      { showClient     = !showClient;     _saveDisplaySettings(); }
+          else if (item.key === '2p-mode') {
+            settingsMenuOpen = false;
+            _closeSettingsBtnAnimated();
+            if (window.open2PModal) window.open2PModal();
+          }
           else if (item.key === 'pihole-link') {
             const url = phLinkEl ? phLinkEl.dataset.href : null;
             if (url && /^https?:\/\//i.test(url)) window.open(url, '_blank', 'noopener,noreferrer');
+            settingsMenuOpen = false;
+            _closeSettingsBtnAnimated();
+          }
+          else if (item.key === 'pihole-link-2') {
+            const url2 = window.PIHOLE2_DASHBOARD;
+            if (url2 && /^https?:\/\//i.test(url2)) window.open(url2, '_blank', 'noopener,noreferrer');
             settingsMenuOpen = false;
             _closeSettingsBtnAnimated();
           }
@@ -2777,4 +3513,11 @@
     if (gravityPollTimer) { clearTimeout(gravityPollTimer); gravityPollTimer = null; }
     window.enterPiholeMode();
   });
+
+  // Called by 2p.js when the modal closes, so mode changes take effect immediately
+  window._game2PReconnect = function() {
+    if (!active) return;
+    _disconnectP2();
+    _init2P().catch(() => {});
+  };
 })();
