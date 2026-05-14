@@ -10,6 +10,8 @@
   let _pasteKeyOpen = false;
   let _pasteIdError  = null;
   let _pasteKeyError = null;
+  let _pasteIdVal   = '';
+  let _pasteKeyVal  = '';
   let _busy = false;
 
   // ── DOM setup ──────────────────────────────────────────────────────
@@ -156,8 +158,11 @@
             </div>
           </div>`;
           if (_pasteIdOpen) {
-            h += `<div class="m2p-confirm-row" style="margin:6px 0">
-              <button class="m2p-btn danger" id="m2p-paste-id-confirm">OVERWRITE</button>
+            h += `<div class="m2p-paste-row">
+              <input class="m2p-paste-input" id="m2p-paste-id-input" type="text"
+                     value="${_esc(_pasteIdVal)}" placeholder="PASTE SESSION ID HERE"
+                     spellcheck="false" autocomplete="off" autocorrect="off">
+              <button class="m2p-btn danger" id="m2p-paste-id-confirm">APPLY</button>
               <button class="m2p-btn" id="m2p-paste-id-cancel">CANCEL</button>
             </div>
             ${_pasteIdError ? `<div class="m2p-hint">${_esc(_pasteIdError)}</div>` : ''}`;
@@ -173,8 +178,11 @@
             </div>
           </div>`;
           if (_pasteKeyOpen) {
-            h += `<div class="m2p-confirm-row" style="margin:6px 0">
-              <button class="m2p-btn danger" id="m2p-paste-key-confirm">OVERWRITE</button>
+            h += `<div class="m2p-paste-row">
+              <input class="m2p-paste-input" id="m2p-paste-key-input" type="text"
+                     value="${_esc(_pasteKeyVal)}" placeholder="PASTE SESSION KEY HERE"
+                     spellcheck="false" autocomplete="off" autocorrect="off">
+              <button class="m2p-btn danger" id="m2p-paste-key-confirm">APPLY</button>
               <button class="m2p-btn" id="m2p-paste-key-cancel">CANCEL</button>
             </div>
             ${_pasteKeyError ? `<div class="m2p-hint">${_esc(_pasteKeyError)}</div>` : ''}`;
@@ -230,7 +238,8 @@
         _busy = true;
         try { _status = await _api('/api/2p/mode', 'POST', { mode: 'off' }); } catch {}
         _confirmRotate = false; _pasteIdOpen = false; _pasteKeyOpen = false;
-        _pasteIdError = null; _pasteKeyError = null; _pendingEnable = false; _busy = false;
+        _pasteIdError = null; _pasteKeyError = null; _pasteIdVal = ''; _pasteKeyVal = '';
+        _pendingEnable = false; _busy = false;
         _render();
       }
     });
@@ -241,7 +250,8 @@
       _busy = true;
       try { _status = await _api('/api/2p/mode', 'POST', { mode: 'local' }); } catch {}
       _confirmRotate = false; _pasteIdOpen = false; _pasteKeyOpen = false;
-      _pasteIdError = null; _pasteKeyError = null; _pendingEnable = false; _busy = false;
+      _pasteIdError = null; _pasteKeyError = null; _pasteIdVal = ''; _pasteKeyVal = '';
+      _pendingEnable = false; _busy = false;
       _render();
     });
 
@@ -257,7 +267,7 @@
       _busy = true; _remoteDisclaimer = false; _pendingEnable = false;
       try { _status = await _api('/api/2p/mode', 'POST', { mode: 'remote' }); } catch {}
       _confirmRotate = false; _pasteIdOpen = false; _pasteKeyOpen = false;
-      _pasteIdError = null; _pasteKeyError = null; _busy = false;
+      _pasteIdError = null; _pasteKeyError = null; _pasteIdVal = ''; _pasteKeyVal = ''; _busy = false;
       _render();
     });
 
@@ -280,48 +290,58 @@
     });
 
     const pasteId = $('m2p-paste-id');
-    if (pasteId) pasteId.addEventListener('click', () => {
+    if (pasteId) pasteId.addEventListener('click', async () => {
       if (_busy) return;
-      _pasteIdOpen = !_pasteIdOpen; _pasteIdError = null; _pasteKeyOpen = false; _render();
+      if (_pasteIdOpen) { _pasteIdOpen = false; _pasteIdError = null; _pasteIdVal = ''; _render(); return; }
+      _pasteIdOpen = true; _pasteIdError = null; _pasteKeyOpen = false; _pasteKeyVal = '';
+      try { _pasteIdVal = (await navigator.clipboard.readText()).trim(); } catch { _pasteIdVal = ''; }
+      _render();
     });
 
     const pasteIdConfirm = $('m2p-paste-id-confirm');
     if (pasteIdConfirm) pasteIdConfirm.addEventListener('click', async () => {
       if (_busy) return;
+      const inputEl = $('m2p-paste-id-input');
+      const text = (inputEl ? inputEl.value : _pasteIdVal).trim();
+      if (!text) { _pasteIdError = 'enter a session id'; _render(); return; }
       _busy = true; _pasteIdError = null;
       try {
-        const text = (await navigator.clipboard.readText()).trim();
         const res = await _api('/api/2p/update', 'POST', { session_id: text, session_key: null });
         if (res.error) { _pasteIdError = res.error; }
-        else { _status = res; _pasteIdOpen = false; }
-      } catch { _pasteIdError = 'clipboard read failed'; }
+        else { _status = res; _pasteIdOpen = false; _pasteIdVal = ''; }
+      } catch { _pasteIdError = 'request failed'; }
       _busy = false; _render();
     });
 
     const pasteIdCancel = $('m2p-paste-id-cancel');
-    if (pasteIdCancel) pasteIdCancel.addEventListener('click', () => { _pasteIdOpen = false; _pasteIdError = null; _render(); });
+    if (pasteIdCancel) pasteIdCancel.addEventListener('click', () => { _pasteIdOpen = false; _pasteIdError = null; _pasteIdVal = ''; _render(); });
 
     const pasteKey = $('m2p-paste-key');
-    if (pasteKey) pasteKey.addEventListener('click', () => {
+    if (pasteKey) pasteKey.addEventListener('click', async () => {
       if (_busy) return;
-      _pasteKeyOpen = !_pasteKeyOpen; _pasteKeyError = null; _pasteIdOpen = false; _render();
+      if (_pasteKeyOpen) { _pasteKeyOpen = false; _pasteKeyError = null; _pasteKeyVal = ''; _render(); return; }
+      _pasteKeyOpen = true; _pasteKeyError = null; _pasteIdOpen = false; _pasteIdVal = '';
+      try { _pasteKeyVal = (await navigator.clipboard.readText()).trim(); } catch { _pasteKeyVal = ''; }
+      _render();
     });
 
     const pasteKeyConfirm = $('m2p-paste-key-confirm');
     if (pasteKeyConfirm) pasteKeyConfirm.addEventListener('click', async () => {
       if (_busy) return;
+      const inputEl = $('m2p-paste-key-input');
+      const text = (inputEl ? inputEl.value : _pasteKeyVal).trim();
+      if (!text) { _pasteKeyError = 'enter a session key'; _render(); return; }
       _busy = true; _pasteKeyError = null;
       try {
-        const text = (await navigator.clipboard.readText()).trim();
         const res = await _api('/api/2p/update', 'POST', { session_id: null, session_key: text });
         if (res.error) { _pasteKeyError = res.error; }
-        else { _status = res; _pasteKeyOpen = false; }
-      } catch { _pasteKeyError = 'clipboard read failed'; }
+        else { _status = res; _pasteKeyOpen = false; _pasteKeyVal = ''; }
+      } catch { _pasteKeyError = 'request failed'; }
       _busy = false; _render();
     });
 
     const pasteKeyCancel = $('m2p-paste-key-cancel');
-    if (pasteKeyCancel) pasteKeyCancel.addEventListener('click', () => { _pasteKeyOpen = false; _pasteKeyError = null; _render(); });
+    if (pasteKeyCancel) pasteKeyCancel.addEventListener('click', () => { _pasteKeyOpen = false; _pasteKeyError = null; _pasteKeyVal = ''; _render(); });
 
     const rotateBtn = $('m2p-rotate');
     if (rotateBtn) rotateBtn.addEventListener('click', () => { _confirmRotate = true; _render(); });
@@ -347,7 +367,7 @@
     _visible = false;
     _overlay.classList.remove('m2p-open');
     _confirmRotate = false; _pasteIdOpen = false; _pasteKeyOpen = false;
-    _pasteIdError = null; _pasteKeyError = null; _busy = false;
+    _pasteIdError = null; _pasteKeyError = null; _pasteIdVal = ''; _pasteKeyVal = ''; _busy = false;
     _remoteDisclaimer = false; _status = null;
     if (window._game2PReconnect) window._game2PReconnect();
   }
@@ -355,7 +375,7 @@
   async function _open() {
     _visible = true;
     _confirmRotate = false; _pasteIdOpen = false; _pasteKeyOpen = false;
-    _pasteIdError = null; _pasteKeyError = null; _busy = false;
+    _pasteIdError = null; _pasteKeyError = null; _pasteIdVal = ''; _pasteKeyVal = ''; _busy = false;
     _remoteDisclaimer = false; _status = null;
     _overlay.classList.add('m2p-open');
     _render();
