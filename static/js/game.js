@@ -1589,7 +1589,7 @@
           ctx.restore();
         }
         ctx.restore();
-        if (showDomain) {
+        if (showDomain && e.domain) {
           const la = e.type === 'blocked' ? alpha : e.labelAlpha * alpha;
           if (la > 0.02) {
             const tier = Math.min(e.count, 3);
