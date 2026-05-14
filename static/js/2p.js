@@ -12,7 +12,10 @@
   let _pasteKeyError = null;
   let _pasteIdVal   = '';
   let _pasteKeyVal  = '';
+  let _confirmPasteId  = false;
+  let _confirmPasteKey = false;
   let _busy = false;
+  let _needsReconnect = false;
 
   // ── DOM setup ──────────────────────────────────────────────────────
   const _overlay = document.createElement('div');
@@ -151,41 +154,61 @@
           h += `<div class="m2p-divider"></div>
           <div class="m2p-hash-row">
             <span class="m2p-hash-label">SESSION ID</span>
-            <span class="m2p-hash-val" title="base64url">${_esc(_status.session_id || '—')}</span>
+            <span class="m2p-hash-val">${_esc(_status.session_id || '—')}</span>
+            <span class="m2p-hash-enc">BASE64URL</span>
             <div class="m2p-hash-actions">
               <button class="m2p-btn" id="m2p-copy-id">COPY</button>
               <button class="m2p-btn" id="m2p-paste-id">PASTE</button>
             </div>
           </div>`;
           if (_pasteIdOpen) {
-            h += `<div class="m2p-paste-row">
-              <input class="m2p-paste-input" id="m2p-paste-id-input" type="text"
-                     value="${_esc(_pasteIdVal)}" placeholder="PASTE SESSION ID HERE"
-                     spellcheck="false" autocomplete="off" autocorrect="off">
-              <button class="m2p-btn danger" id="m2p-paste-id-confirm">APPLY</button>
-              <button class="m2p-btn" id="m2p-paste-id-cancel">CANCEL</button>
-            </div>
-            ${_pasteIdError ? `<div class="m2p-hint">${_esc(_pasteIdError)}</div>` : ''}`;
+            if (_confirmPasteId) {
+              h += `<div class="m2p-warn">THIS WILL DISCONNECT<br>ANY ACTIVE SESSION.</div>
+              <div class="m2p-confirm-row">
+                <button class="m2p-btn danger" id="m2p-paste-id-do">CONFIRM</button>
+                <button class="m2p-btn" id="m2p-paste-id-cancel">CANCEL</button>
+              </div>
+              ${_pasteIdError ? `<div class="m2p-hint">${_esc(_pasteIdError)}</div>` : ''}`;
+            } else {
+              h += `<div class="m2p-paste-row">
+                <input class="m2p-paste-input" id="m2p-paste-id-input" type="text"
+                       value="${_esc(_pasteIdVal)}" placeholder="PASTE SESSION ID HERE"
+                       spellcheck="false" autocomplete="off" autocorrect="off">
+                <button class="m2p-btn danger" id="m2p-paste-id-confirm">APPLY</button>
+                <button class="m2p-btn" id="m2p-paste-id-cancel">CANCEL</button>
+              </div>
+              ${_pasteIdError ? `<div class="m2p-hint">${_esc(_pasteIdError)}</div>` : ''}`;
+            }
           }
 
           // SESSION KEY row
           h += `<div class="m2p-hash-row" style="margin-top:4px">
             <span class="m2p-hash-label">SESSION KEY</span>
-            <span class="m2p-hash-val" title="SHA-512/base64 · XSalsa20-Poly1305">${_esc(_status.session_key || '—')}</span>
+            <span class="m2p-hash-val">${_esc(_status.session_key || '—')}</span>
+            <span class="m2p-hash-enc">XSALSA20-POLY1305</span>
             <div class="m2p-hash-actions">
               <button class="m2p-btn" id="m2p-copy-key">COPY</button>
               <button class="m2p-btn" id="m2p-paste-key">PASTE</button>
             </div>
           </div>`;
           if (_pasteKeyOpen) {
-            h += `<div class="m2p-paste-row">
-              <input class="m2p-paste-input" id="m2p-paste-key-input" type="text"
-                     value="${_esc(_pasteKeyVal)}" placeholder="PASTE SESSION KEY HERE"
-                     spellcheck="false" autocomplete="off" autocorrect="off">
-              <button class="m2p-btn danger" id="m2p-paste-key-confirm">APPLY</button>
-              <button class="m2p-btn" id="m2p-paste-key-cancel">CANCEL</button>
-            </div>
-            ${_pasteKeyError ? `<div class="m2p-hint">${_esc(_pasteKeyError)}</div>` : ''}`;
+            if (_confirmPasteKey) {
+              h += `<div class="m2p-warn">THIS WILL DISCONNECT<br>ANY ACTIVE SESSION.</div>
+              <div class="m2p-confirm-row">
+                <button class="m2p-btn danger" id="m2p-paste-key-do">CONFIRM</button>
+                <button class="m2p-btn" id="m2p-paste-key-cancel">CANCEL</button>
+              </div>
+              ${_pasteKeyError ? `<div class="m2p-hint">${_esc(_pasteKeyError)}</div>` : ''}`;
+            } else {
+              h += `<div class="m2p-paste-row">
+                <input class="m2p-paste-input" id="m2p-paste-key-input" type="text"
+                       value="${_esc(_pasteKeyVal)}" placeholder="PASTE SESSION KEY HERE"
+                       spellcheck="false" autocomplete="off" autocorrect="off">
+                <button class="m2p-btn danger" id="m2p-paste-key-confirm">APPLY</button>
+                <button class="m2p-btn" id="m2p-paste-key-cancel">CANCEL</button>
+              </div>
+              ${_pasteKeyError ? `<div class="m2p-hint">${_esc(_pasteKeyError)}</div>` : ''}`;
+            }
           }
 
           h += `<div class="m2p-divider"></div>
@@ -236,10 +259,10 @@
       } else {
         // DISABLE
         _busy = true;
-        try { _status = await _api('/api/2p/mode', 'POST', { mode: 'off' }); } catch {}
+        try { _status = await _api('/api/2p/mode', 'POST', { mode: 'off' }); _needsReconnect = true; } catch {}
         _confirmRotate = false; _pasteIdOpen = false; _pasteKeyOpen = false;
         _pasteIdError = null; _pasteKeyError = null; _pasteIdVal = ''; _pasteKeyVal = '';
-        _pendingEnable = false; _busy = false;
+        _confirmPasteId = false; _confirmPasteKey = false; _pendingEnable = false; _busy = false;
         _render();
       }
     });
@@ -248,10 +271,10 @@
     if (localBtn) localBtn.addEventListener('click', async () => {
       if (_busy || !_status.local_configured) return;
       _busy = true;
-      try { _status = await _api('/api/2p/mode', 'POST', { mode: 'local' }); } catch {}
+      try { _status = await _api('/api/2p/mode', 'POST', { mode: 'local' }); _needsReconnect = true; } catch {}
       _confirmRotate = false; _pasteIdOpen = false; _pasteKeyOpen = false;
       _pasteIdError = null; _pasteKeyError = null; _pasteIdVal = ''; _pasteKeyVal = '';
-      _pendingEnable = false; _busy = false;
+      _confirmPasteId = false; _confirmPasteKey = false; _pendingEnable = false; _busy = false;
       _render();
     });
 
@@ -265,9 +288,10 @@
     if (disclaimerConfirm) disclaimerConfirm.addEventListener('click', async () => {
       if (_busy) return;
       _busy = true; _remoteDisclaimer = false; _pendingEnable = false;
-      try { _status = await _api('/api/2p/mode', 'POST', { mode: 'remote' }); } catch {}
+      try { _status = await _api('/api/2p/mode', 'POST', { mode: 'remote' }); _needsReconnect = true; } catch {}
       _confirmRotate = false; _pasteIdOpen = false; _pasteKeyOpen = false;
-      _pasteIdError = null; _pasteKeyError = null; _pasteIdVal = ''; _pasteKeyVal = ''; _busy = false;
+      _pasteIdError = null; _pasteKeyError = null; _pasteIdVal = ''; _pasteKeyVal = '';
+      _confirmPasteId = false; _confirmPasteKey = false; _busy = false;
       _render();
     });
 
@@ -299,22 +323,30 @@
     });
 
     const pasteIdConfirm = $('m2p-paste-id-confirm');
-    if (pasteIdConfirm) pasteIdConfirm.addEventListener('click', async () => {
-      if (_busy) return;
+    if (pasteIdConfirm) pasteIdConfirm.addEventListener('click', () => {
       const inputEl = $('m2p-paste-id-input');
       const text = (inputEl ? inputEl.value : _pasteIdVal).trim();
       if (!text) { _pasteIdError = 'enter a session id'; _render(); return; }
+      _pasteIdVal = text; _pasteIdError = null; _confirmPasteId = true; _render();
+    });
+
+    const pasteIdDo = $('m2p-paste-id-do');
+    if (pasteIdDo) pasteIdDo.addEventListener('click', async () => {
+      if (_busy) return;
       _busy = true; _pasteIdError = null;
       try {
-        const res = await _api('/api/2p/update', 'POST', { session_id: text, session_key: null });
-        if (res.error) { _pasteIdError = res.error; }
-        else { _status = res; _pasteIdOpen = false; _pasteIdVal = ''; }
-      } catch { _pasteIdError = 'request failed'; }
+        const res = await _api('/api/2p/update', 'POST', { session_id: _pasteIdVal, session_key: null });
+        if (res.error) { _pasteIdError = res.error; _confirmPasteId = false; }
+        else { _status = res; _pasteIdOpen = false; _pasteIdVal = ''; _confirmPasteId = false; _needsReconnect = true; }
+      } catch { _pasteIdError = 'request failed'; _confirmPasteId = false; }
       _busy = false; _render();
     });
 
     const pasteIdCancel = $('m2p-paste-id-cancel');
-    if (pasteIdCancel) pasteIdCancel.addEventListener('click', () => { _pasteIdOpen = false; _pasteIdError = null; _pasteIdVal = ''; _render(); });
+    if (pasteIdCancel) pasteIdCancel.addEventListener('click', () => {
+      if (_confirmPasteId) { _confirmPasteId = false; _render(); return; }
+      _pasteIdOpen = false; _pasteIdError = null; _pasteIdVal = ''; _render();
+    });
 
     const pasteKey = $('m2p-paste-key');
     if (pasteKey) pasteKey.addEventListener('click', async () => {
@@ -326,22 +358,30 @@
     });
 
     const pasteKeyConfirm = $('m2p-paste-key-confirm');
-    if (pasteKeyConfirm) pasteKeyConfirm.addEventListener('click', async () => {
-      if (_busy) return;
+    if (pasteKeyConfirm) pasteKeyConfirm.addEventListener('click', () => {
       const inputEl = $('m2p-paste-key-input');
       const text = (inputEl ? inputEl.value : _pasteKeyVal).trim();
       if (!text) { _pasteKeyError = 'enter a session key'; _render(); return; }
+      _pasteKeyVal = text; _pasteKeyError = null; _confirmPasteKey = true; _render();
+    });
+
+    const pasteKeyDo = $('m2p-paste-key-do');
+    if (pasteKeyDo) pasteKeyDo.addEventListener('click', async () => {
+      if (_busy) return;
       _busy = true; _pasteKeyError = null;
       try {
-        const res = await _api('/api/2p/update', 'POST', { session_id: null, session_key: text });
-        if (res.error) { _pasteKeyError = res.error; }
-        else { _status = res; _pasteKeyOpen = false; _pasteKeyVal = ''; }
-      } catch { _pasteKeyError = 'request failed'; }
+        const res = await _api('/api/2p/update', 'POST', { session_id: null, session_key: _pasteKeyVal });
+        if (res.error) { _pasteKeyError = res.error; _confirmPasteKey = false; }
+        else { _status = res; _pasteKeyOpen = false; _pasteKeyVal = ''; _confirmPasteKey = false; _needsReconnect = true; }
+      } catch { _pasteKeyError = 'request failed'; _confirmPasteKey = false; }
       _busy = false; _render();
     });
 
     const pasteKeyCancel = $('m2p-paste-key-cancel');
-    if (pasteKeyCancel) pasteKeyCancel.addEventListener('click', () => { _pasteKeyOpen = false; _pasteKeyError = null; _pasteKeyVal = ''; _render(); });
+    if (pasteKeyCancel) pasteKeyCancel.addEventListener('click', () => {
+      if (_confirmPasteKey) { _confirmPasteKey = false; _render(); return; }
+      _pasteKeyOpen = false; _pasteKeyError = null; _pasteKeyVal = ''; _render();
+    });
 
     const rotateBtn = $('m2p-rotate');
     if (rotateBtn) rotateBtn.addEventListener('click', () => { _confirmRotate = true; _render(); });
@@ -350,7 +390,7 @@
     if (rotateYes) rotateYes.addEventListener('click', async () => {
       if (_busy) return;
       _busy = true;
-      try { _status = await _api('/api/2p/rotate', 'POST', {}); } catch {}
+      try { _status = await _api('/api/2p/rotate', 'POST', {}); _needsReconnect = true; } catch {}
       _confirmRotate = false; _busy = false;
       _render();
     });
@@ -367,15 +407,19 @@
     _visible = false;
     _overlay.classList.remove('m2p-open');
     _confirmRotate = false; _pasteIdOpen = false; _pasteKeyOpen = false;
-    _pasteIdError = null; _pasteKeyError = null; _pasteIdVal = ''; _pasteKeyVal = ''; _busy = false;
+    _pasteIdError = null; _pasteKeyError = null; _pasteIdVal = ''; _pasteKeyVal = '';
+    _confirmPasteId = false; _confirmPasteKey = false; _busy = false;
     _remoteDisclaimer = false; _status = null;
-    if (window._game2PReconnect) window._game2PReconnect();
+    if (_needsReconnect && window._game2PReconnect) window._game2PReconnect();
+    _needsReconnect = false;
   }
 
   async function _open() {
     _visible = true;
+    _needsReconnect = false;
     _confirmRotate = false; _pasteIdOpen = false; _pasteKeyOpen = false;
-    _pasteIdError = null; _pasteKeyError = null; _pasteIdVal = ''; _pasteKeyVal = ''; _busy = false;
+    _pasteIdError = null; _pasteKeyError = null; _pasteIdVal = ''; _pasteKeyVal = '';
+    _confirmPasteId = false; _confirmPasteKey = false; _busy = false;
     _remoteDisclaimer = false; _status = null;
     _overlay.classList.add('m2p-open');
     _render();

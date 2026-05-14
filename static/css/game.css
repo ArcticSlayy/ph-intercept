@@ -256,6 +256,14 @@ body.pihole-mode #pihole-canvas {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.m2p-hash-enc {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  color: rgba(175, 200, 238, 0.28);
+  white-space: nowrap;
+  flex-shrink: 0;
+  letter-spacing: 0.04em;
+}
 .m2p-hash-actions {
   display: flex;
   gap: 8px;
@@ -388,7 +396,7 @@ body.pihole-mode #pihole-canvas {
 /* Error message under save */
 .m2p-error {
   font-family: "Press Start 2P", monospace;
-  font-size: 7px;
+  font-size: 8px;
   color: rgba(255, 80, 60, 0.85);
   letter-spacing: 0.03em;
   margin-top: 6px;
