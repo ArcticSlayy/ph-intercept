@@ -334,7 +334,7 @@ body.pihole-mode #pihole-canvas {
   border: 1px solid rgba(100, 140, 175, 0.35);
   border-radius: 3px;
   color: rgba(175, 200, 238, 0.92);
-  font-family: monospace;
+  font-family: "IBM Plex Mono", monospace;
   font-size: 10px;
   padding: 5px 7px;
   outline: none;
