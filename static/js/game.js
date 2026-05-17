@@ -3006,6 +3006,7 @@
         const evts = JSON.parse(e.data);
         if (Array.isArray(evts)) {
           queue.push(...evts);
+          if (queue.length > 200) queue.splice(0, queue.length - 200);
           if (twoPlayerMode === 'remote' && relayWs && relayWs.readyState === 1 && relayState === 'connected') {
             const stripped = evts.map(ev => ({ status: ev.status, source: ev.source }));
             const _evtBuf = _encryptMsg({ type: 'events', events: stripped });
@@ -3022,9 +3023,31 @@
   }
 
   // ── 2P crypto (XSalsa20-Poly1305 via TweetNaCl — no secure context required) ──
+
+  // HKDF-SHA-512 (RFC 5869) built over nacl.hash so no WebCrypto / secure context needed.
+  function _hmac512(key, msg) {
+    const BS = 128; // SHA-512 block size
+    let k = key.length > BS ? nacl.hash(key) : key;
+    const pad = new Uint8Array(BS);
+    pad.set(k);
+    const ipad = pad.map(b => b ^ 0x36);
+    const opad = pad.map(b => b ^ 0x5c);
+    const inner = new Uint8Array(BS + msg.length);
+    inner.set(ipad); inner.set(msg, BS);
+    const ih = nacl.hash(inner);
+    const outer = new Uint8Array(BS + ih.length);
+    outer.set(opad); outer.set(ih, BS);
+    return nacl.hash(outer);
+  }
+
   function _deriveRelayKey(keyStr) {
-    // SHA-512(keyStr) → first 32 bytes as secretbox key. Key never leaves this device.
-    return nacl.hash(new TextEncoder().encode(keyStr)).subarray(0, 32);
+    const enc  = new TextEncoder();
+    const salt = enc.encode('ph-intercept-relay-v1');
+    const info = enc.encode('secretbox-key');
+    const prk  = _hmac512(salt, enc.encode(keyStr));   // Extract
+    const t1in = new Uint8Array(info.length + 1);
+    t1in.set(info); t1in[info.length] = 0x01;
+    return _hmac512(prk, t1in).subarray(0, 32);        // Expand → 32-byte secretbox key
   }
 
   function _encryptMsg(obj) {
@@ -3097,6 +3120,7 @@
         const evts = JSON.parse(e.data);
         if (Array.isArray(evts)) {
           p2Queue.push(...evts);
+          if (p2Queue.length > 200) p2Queue.splice(0, p2Queue.length - 200);
           if (!_p2ShipVisible) _p2Reveal();
         }
       } catch {}
@@ -3118,6 +3142,7 @@
       if (!msg) return;
       if (msg.type === 'events' && Array.isArray(msg.events)) {
         p2Queue.push(...msg.events);
+        if (p2Queue.length > 200) p2Queue.splice(0, p2Queue.length - 200);
       } else if (msg.type === 'stats') {
         if (msg.blocked != null) p2HudStats.blocked = msg.blocked;
         if (msg.queries != null) p2HudStats.queries = msg.queries;
@@ -3193,10 +3218,19 @@
         _connectP2Local();
         p2ShipX = W * 3 / 4;
         if (wasOff) { _2pBannerAt = performance.now(); _2pDividerAt = performance.now(); }
-      } else if (newMode === 'remote' && s.relay_url && s.session_key_full) {
-        _connectP2Remote(s.relay_url, s.session_key_full);
-        p2ShipX = W * 3 / 4;
-        if (wasOff) { _2pBannerAt = performance.now(); _2pDividerAt = performance.now(); }
+      } else if (newMode === 'remote' && s.relay_url) {
+        try {
+          const kRes = await fetch('/api/2p/key', { signal: AbortSignal.timeout(1800) }).then(r => r.json());
+          if (kRes.session_key_full) {
+            _connectP2Remote(s.relay_url, kRes.session_key_full);
+            p2ShipX = W * 3 / 4;
+            if (wasOff) { _2pBannerAt = performance.now(); _2pDividerAt = performance.now(); }
+          } else {
+            twoPlayerMode = 'off';
+          }
+        } catch {
+          twoPlayerMode = 'off';
+        }
       } else {
         twoPlayerMode = 'off';
         // carrier and ship lerp back smoothly via physics

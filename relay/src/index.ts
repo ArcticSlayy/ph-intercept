@@ -69,7 +69,11 @@ export class RateLimiter extends DurableObject<Env> {
 
   async release(): Promise<void> {
     const count = (await this.ctx.storage.get<number>('c')) ?? 0;
-    if (count > 0) await this.ctx.storage.put('c', count - 1);
+    if (count <= 1) {
+      await this.ctx.storage.delete('c');
+    } else {
+      await this.ctx.storage.put('c', count - 1);
+    }
   }
 }
 
@@ -147,8 +151,9 @@ export class RelaySession extends DurableObject<Env> {
     await this._releaseSlot(ws);
   }
 
-  webSocketError(ws: WebSocket, _error: unknown): void {
+  async webSocketError(ws: WebSocket, _error: unknown): Promise<void> {
     this._notifyPartner(ws);
+    await this._releaseSlot(ws);
   }
 
   async alarm(): Promise<void> {

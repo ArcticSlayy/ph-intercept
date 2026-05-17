@@ -60,6 +60,22 @@
     document.body.removeChild(t);
   }
 
+  const _KEY_SS = '_2p_credentials';
+
+  async function _getKey() {
+    try {
+      const cached = sessionStorage.getItem(_KEY_SS);
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    const data = await _api('/api/2p/key');
+    try { sessionStorage.setItem(_KEY_SS, JSON.stringify(data)); } catch {}
+    return data;
+  }
+
+  function _clearKeyCache() {
+    try { sessionStorage.removeItem(_KEY_SS); } catch {}
+  }
+
   function _flash(btn, msg) {
     const orig = btn.textContent;
     btn.textContent = msg;
@@ -302,14 +318,16 @@
     });
 
     const copyId = $('m2p-copy-id');
-    if (copyId) copyId.addEventListener('click', () => {
-      _copy(_status.session_id_full || '');
+    if (copyId) copyId.addEventListener('click', async () => {
+      const k = await _getKey();
+      _copy((k && k.session_id_full) || '');
       _flash(copyId, 'COPIED');
     });
 
     const copyKey = $('m2p-copy-key');
-    if (copyKey) copyKey.addEventListener('click', () => {
-      _copy(_status.session_key_full || '');
+    if (copyKey) copyKey.addEventListener('click', async () => {
+      const k = await _getKey();
+      _copy((k && k.session_key_full) || '');
       _flash(copyKey, 'COPIED');
     });
 
@@ -337,7 +355,7 @@
       try {
         const res = await _api('/api/2p/update', 'POST', { session_id: _pasteIdVal, session_key: null });
         if (res.error) { _pasteIdError = res.error; _confirmPasteId = false; }
-        else { _status = res; _pasteIdOpen = false; _pasteIdVal = ''; _confirmPasteId = false; _needsReconnect = true; }
+        else { _status = res; _clearKeyCache(); _pasteIdOpen = false; _pasteIdVal = ''; _confirmPasteId = false; _needsReconnect = true; }
       } catch { _pasteIdError = 'request failed'; _confirmPasteId = false; }
       _busy = false; _render();
     });
@@ -372,7 +390,7 @@
       try {
         const res = await _api('/api/2p/update', 'POST', { session_id: null, session_key: _pasteKeyVal });
         if (res.error) { _pasteKeyError = res.error; _confirmPasteKey = false; }
-        else { _status = res; _pasteKeyOpen = false; _pasteKeyVal = ''; _confirmPasteKey = false; _needsReconnect = true; }
+        else { _status = res; _clearKeyCache(); _pasteKeyOpen = false; _pasteKeyVal = ''; _confirmPasteKey = false; _needsReconnect = true; }
       } catch { _pasteKeyError = 'request failed'; _confirmPasteKey = false; }
       _busy = false; _render();
     });
@@ -390,7 +408,7 @@
     if (rotateYes) rotateYes.addEventListener('click', async () => {
       if (_busy) return;
       _busy = true;
-      try { _status = await _api('/api/2p/rotate', 'POST', {}); _needsReconnect = true; } catch {}
+      try { _status = await _api('/api/2p/rotate', 'POST', {}); _clearKeyCache(); _needsReconnect = true; } catch {}
       _confirmRotate = false; _busy = false;
       _render();
     });

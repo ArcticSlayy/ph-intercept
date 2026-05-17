@@ -1,0 +1,16 @@
+name: Rotate relay IP_SALT
+
+on:
+  schedule:
+    - cron: '0 3 * * *'   # daily at 03:00 UTC
+  workflow_dispatch:
+
+jobs:
+  rotate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate and push new salt
+        run: printf '%s' "$(openssl rand -hex 32)" | npx wrangler@latest secret put IP_SALT --name intercept-relay
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

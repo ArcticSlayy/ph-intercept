@@ -23,6 +23,7 @@ def _load() -> dict:
 def _save(data: dict) -> None:
     _SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
     _SESSION_FILE.write_text(json.dumps(data))
+    _SESSION_FILE.chmod(0o600)
 
 
 def _trunc(h: str) -> str:
@@ -41,7 +42,7 @@ def _remote_fields(data: dict) -> dict:
     }
 
 
-def get_status(local_configured: bool, remote_enabled: bool) -> dict:
+def get_status(local_configured: bool, remote_enabled: bool = True) -> dict:
     data = _load()
     mode = data.get("mode", "off")
     if mode == "local" and not local_configured:
@@ -62,7 +63,7 @@ def _new_session_key() -> str:
     return base64.b85encode(hashlib.blake2b(secrets.token_bytes(64), digest_size=32).digest()).decode()
 
 
-def set_mode(mode: str, local_configured: bool, remote_enabled: bool) -> dict:
+def set_mode(mode: str, local_configured: bool, remote_enabled: bool = True) -> dict:
     if mode not in _VALID_MODES:
         raise ValueError(f"invalid mode: {mode!r}")
     if mode == "local" and not local_configured:
@@ -78,7 +79,7 @@ def set_mode(mode: str, local_configured: bool, remote_enabled: bool) -> dict:
     return get_status(local_configured, remote_enabled)
 
 
-def rotate(local_configured: bool, remote_enabled: bool) -> dict:
+def rotate(local_configured: bool, remote_enabled: bool = True) -> dict:
     data = _load()
     data["session_id"] = _new_session_id()
     data["session_key"] = _new_session_key()
@@ -86,7 +87,17 @@ def rotate(local_configured: bool, remote_enabled: bool) -> dict:
     return get_status(local_configured, remote_enabled)
 
 
-def update_hashes(session_id: str | None, session_key: str | None, local_configured: bool, remote_enabled: bool) -> dict:
+def get_key(remote_enabled: bool = True) -> dict | None:
+    data = _load()
+    if data.get("mode") != "remote" or not remote_enabled:
+        return None
+    return {
+        "session_id_full": data.get("session_id", ""),
+        "session_key_full": data.get("session_key", ""),
+    }
+
+
+def update_hashes(session_id: str | None, session_key: str | None, local_configured: bool, remote_enabled: bool = True) -> dict:
     if session_id is not None and not _B64URL43.match(session_id):
         raise ValueError("session_id must be 43 base64url chars")
     if session_key is not None and not _B85_40.match(session_key):
