@@ -22,7 +22,7 @@
 
 <!-- BG config injected server-side so JS doesn't need a separate fetch -->
 <script type="application/json" id="bg-config">{{ bg_config | tojson }}</script>
-<script>window.PROVIDER = {{ provider | tojson }}; window.PIHOLE2_DASHBOARD = {{ pihole2_dashboard | tojson }}; window.TWO_PLAYER_ENABLED = {{ two_player_enabled | tojson }}; window.REMOTE_2P_ENABLED = {{ remote_2p_enabled | tojson }};</script>
+<script>window.PROVIDER = {{ provider | tojson }}; window.PIHOLE2_DASHBOARD = {{ pihole2_dashboard | tojson }}; window.TWO_PLAYER_ENABLED = {{ two_player_enabled | tojson }};</script>
 
 <div id="bg-image"></div>
 
@@ -67,9 +67,8 @@ if (window.BG_CONFIG.bg_image) {
 
 <!-- Game -->
 <script src="/static/js/game-bitmaps.js"></script>
-{% if remote_2p_enabled %}<script src="/static/js/tweetnacl.min.js"></script>{% endif %}
 <script src="/static/js/game.js"></script>
-{% if two_player_enabled %}<script src="/static/js/2p.js"></script>{% endif %}
+<script src="/static/js/2p.js"></script>
 
 </body>
 </html>

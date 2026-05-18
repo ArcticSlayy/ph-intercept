@@ -231,74 +231,6 @@ body.pihole-mode #pihole-canvas {
 .m2p-seg { display: flex; gap: 6px; }
 
 /* Hash value display */
-.m2p-hash-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 26px;
-  margin-bottom: 6px;
-}
-.m2p-hash-label {
-  font-family: "Press Start 2P", monospace;
-  font-size: 8px;
-  color: rgba(175, 200, 238, 0.45);
-  white-space: nowrap;
-  flex-shrink: 0;
-  min-width: 90px;
-}
-.m2p-hash-val {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 12px;
-  color: rgba(190, 215, 255, 0.70);
-  letter-spacing: 0.04em;
-  flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.m2p-hash-enc {
-  font-family: "Press Start 2P", monospace;
-  font-size: 6px;
-  color: rgba(175, 200, 238, 0.28);
-  white-space: nowrap;
-  flex-shrink: 0;
-  letter-spacing: 0.04em;
-}
-.m2p-hash-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 4px;
-  margin-bottom: 4px;
-}
-
-/* Input fields (edit mode) */
-.m2p-input {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 12px;
-  background: rgba(20, 25, 35, 0.85);
-  border: 1px solid rgba(140, 160, 175, 0.25);
-  color: rgba(200, 220, 255, 0.85);
-  padding: 5px 8px;
-  flex: 1;
-  outline: none;
-  letter-spacing: 0.03em;
-  user-select: text;
-  -webkit-user-select: text;
-  min-width: 0;
-}
-.m2p-input:focus { border-color: rgba(140,160,175,0.60); }
-.m2p-input.invalid { border-color: rgba(255,80,60,0.55); }
-
-/* Edit hint / warning text */
-.m2p-hint {
-  font-family: "Press Start 2P", monospace;
-  font-size: 8px;
-  color: rgba(255, 190, 50, 0.70);
-  letter-spacing: 0.03em;
-  line-height: 1.7;
-  margin: 4px 0;
-}
-
 /* Info text (local mode) */
 .m2p-info {
   font-family: "Press Start 2P", monospace;
@@ -307,49 +239,15 @@ body.pihole-mode #pihole-canvas {
   letter-spacing: 0.04em;
   margin: 4px 0;
 }
-
-/* Rotate confirmation warning */
-.m2p-warn {
+.m2p-error {
   font-family: "Press Start 2P", monospace;
-  font-size: 8px;
-  color: rgba(255, 190, 50, 0.85);
+  font-size: 7px;
+  color: rgba(255, 100, 80, 0.90);
   letter-spacing: 0.03em;
-  line-height: 1.7;
-  margin-bottom: 10px;
+  line-height: 1.8;
+  margin: 8px 0 2px;
 }
 
-.m2p-confirm-row { display: flex; gap: 10px; }
-
-.m2p-paste-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin: 6px 0;
-}
-
-.m2p-paste-input {
-  flex: 1;
-  min-width: 0;
-  background: rgba(10, 20, 35, 0.85);
-  border: 1px solid rgba(100, 140, 175, 0.35);
-  border-radius: 3px;
-  color: rgba(175, 200, 238, 0.92);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
-  padding: 5px 7px;
-  outline: none;
-}
-.m2p-paste-input:focus { border-color: rgba(100, 180, 255, 0.55); }
-.m2p-paste-input::placeholder { color: rgba(175, 200, 238, 0.25); }
-
-/* Remote bottom action bar */
-.m2p-remote-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-}
 
 /* Edit-fields pill toggle -- matches canvas settings pill exactly */
 .m2p-pill {

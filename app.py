@@ -13,8 +13,8 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
 
-from core.config import BG_MODE, BG_IMAGE, PROVIDER, RETURN_URL, SKY_PRESET, SKY_PRESETS, TWO_PLAYER_LOCAL_CONFIGURED, TWO_PLAYER_ENABLED, REMOTE_2P_ENABLED, PIHOLE2_DASHBOARD
-from core.multiplayer import get_status as mp_status, set_mode as mp_set_mode, rotate as mp_rotate, update_hashes as mp_update_hashes, get_key as mp_get_key
+from core.config import BG_MODE, BG_IMAGE, PROVIDER, RETURN_URL, SKY_PRESET, SKY_PRESETS, TWO_PLAYER_LOCAL_CONFIGURED, TWO_PLAYER_ENABLED, PIHOLE2_DASHBOARD, PIHOLE2_URL, PIHOLE2_PASSWORD
+from core.multiplayer import get_status as mp_status, set_mode as mp_set_mode
 
 if PROVIDER == "adguard":
     from core.config import ADGUARD_DASHBOARD as _DASHBOARD, ADGUARD_VERIFY_SSL as _VERIFY_SSL
@@ -33,6 +33,7 @@ if TWO_PLAYER_LOCAL_CONFIGURED:
     from core.pihole import (
         add_p2_ws_client, remove_p2_ws_client, reset_p2_watermark,
         get_p2_pihole_stats, drop_p2_session, query_p2_poller,
+        toggle_p2_blocking, trigger_p2_gravity_update,
     )
 
 _http_client: httpx.AsyncClient | None = None
@@ -79,7 +80,7 @@ _CSP = (
     "style-src 'self' 'unsafe-inline'; "
     "img-src * data: blob:; "
     "font-src 'self'; "
-    "connect-src 'self'" + (" wss://relay.intercept.work" if REMOTE_2P_ENABLED else "") + "; "
+    "connect-src 'self'; "
     "frame-ancestors *"
 )
 
@@ -106,7 +107,6 @@ async def index(request: Request) -> HTMLResponse:
         "pihole_dashboard": _DASHBOARD,
         "pihole2_dashboard": PIHOLE2_DASHBOARD,
         "two_player_enabled": TWO_PLAYER_ENABLED,
-        "remote_2p_enabled": REMOTE_2P_ENABLED,
         "bg_config": {
             "bg_mode": BG_MODE,
             "bg_image": BG_IMAGE,
@@ -145,46 +145,36 @@ async def pihole_toggle(request: Request) -> JSONResponse:
 
 
 async def two_player_status(_request: Request) -> JSONResponse:
-    data = mp_status(TWO_PLAYER_LOCAL_CONFIGURED, REMOTE_2P_ENABLED)
-    data.pop("session_id_full", None)
-    data.pop("session_key_full", None)
-    return JSONResponse(data)
+    return JSONResponse(mp_status(TWO_PLAYER_LOCAL_CONFIGURED))
+
+
+_PIHOLE2_PLACEHOLDER = "CHANGE.ME"
 
 
 async def two_player_set_mode(request: Request) -> JSONResponse:
     body = await request.json()
+    mode = body.get("mode", "")
+    if mode == "local":
+        if not PIHOLE2_URL:
+            return JSONResponse({"error": "PIHOLE2_URL is not set in your configuration"}, status_code=400)
+        if _PIHOLE2_PLACEHOLDER in PIHOLE2_URL:
+            return JSONResponse({"error": "PIHOLE2_URL still has the default placeholder value - update it in your compose.yaml"}, status_code=400)
+        if not (PIHOLE2_URL.startswith("http://") or PIHOLE2_URL.startswith("https://")):
+            return JSONResponse({"error": "PIHOLE2_URL must start with http:// or https://"}, status_code=400)
+        if not PIHOLE2_PASSWORD:
+            return JSONResponse({"error": "PIHOLE2_PASSWORD is not set in your configuration"}, status_code=400)
+        if _http_client2:
+            try:
+                resp = await _http_client2.post(
+                    f"{PIHOLE2_URL}/auth",
+                    json={"password": PIHOLE2_PASSWORD},
+                )
+                if not resp.json().get("session", {}).get("valid"):
+                    return JSONResponse({"error": "Pi-hole 2 authentication failed - check PIHOLE2_PASSWORD"}, status_code=400)
+            except Exception:
+                return JSONResponse({"error": "Could not reach Pi-hole 2 - check PIHOLE2_URL"}, status_code=400)
     try:
-        return JSONResponse(mp_set_mode(body.get("mode", ""), TWO_PLAYER_LOCAL_CONFIGURED, REMOTE_2P_ENABLED))
-    except ValueError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=400)
-
-
-async def two_player_rotate(_request: Request) -> JSONResponse:
-    data = mp_rotate(TWO_PLAYER_LOCAL_CONFIGURED, REMOTE_2P_ENABLED)
-    data.pop("session_id_full", None)
-    data.pop("session_key_full", None)
-    return JSONResponse(data)
-
-
-async def two_player_key(_request: Request) -> JSONResponse:
-    key = mp_get_key(REMOTE_2P_ENABLED)
-    if key is None:
-        return JSONResponse({"error": "not in remote mode"}, status_code=404)
-    return JSONResponse(key)
-
-
-async def two_player_update(request: Request) -> JSONResponse:
-    body = await request.json()
-    try:
-        data = mp_update_hashes(
-            body.get("session_id"),
-            body.get("session_key"),
-            TWO_PLAYER_LOCAL_CONFIGURED,
-            REMOTE_2P_ENABLED,
-        )
-        data.pop("session_id_full", None)
-        data.pop("session_key_full", None)
-        return JSONResponse(data)
+        return JSONResponse(mp_set_mode(mode, TWO_PLAYER_LOCAL_CONFIGURED))
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
 
@@ -236,6 +226,27 @@ async def pihole_gravity_update(request: Request) -> JSONResponse:
     return JSONResponse(await trigger_filter_update(_http_client))
 
 
+async def pihole2_toggle(request: Request) -> JSONResponse:
+    if not TWO_PLAYER_LOCAL_CONFIGURED or not _http_client2:
+        return JSONResponse({"error": "not configured"}, status_code=400)
+    body = await request.json()
+    timer = body.get("timer")
+    if timer is not None:
+        try:
+            timer = int(timer)
+            if timer <= 0:
+                timer = None
+        except (TypeError, ValueError):
+            timer = None
+    return JSONResponse(await toggle_p2_blocking(_http_client2, bool(body.get("enable", True)), timer))
+
+
+async def pihole2_gravity_update(_request: Request) -> JSONResponse:
+    if not TWO_PLAYER_LOCAL_CONFIGURED or not _http_client2:
+        return JSONResponse({"error": "not configured"}, status_code=400)
+    return JSONResponse(await trigger_p2_gravity_update(_http_client2))
+
+
 async def pihole_events(request: Request) -> StreamingResponse:
     async def generate():
         q: asyncio.Queue = asyncio.Queue(maxsize=60)
@@ -269,13 +280,10 @@ app = Starlette(
         Route("/api/pihole/gravity-update", pihole_gravity_update, methods=["POST"]),
         Route("/api/2p/status", two_player_status),
         Route("/api/2p/mode", two_player_set_mode, methods=["POST"]),
-        *([
-            Route("/api/2p/key", two_player_key),
-            Route("/api/2p/rotate", two_player_rotate, methods=["POST"]),
-            Route("/api/2p/update", two_player_update, methods=["POST"]),
-        ] if REMOTE_2P_ENABLED else []),
         Route("/api/pihole/events", pihole_events),
         Route("/api/pihole2/stats", pihole2_stats),
+        Route("/api/pihole2/toggle", pihole2_toggle, methods=["POST"]),
+        Route("/api/pihole2/gravity-update", pihole2_gravity_update, methods=["POST"]),
         Route("/api/pihole2/events", pihole2_events),
         Mount("/static", StaticFiles(directory=_base / "static"), name="static"),
         Mount("/bg", StaticFiles(directory=_base / "static" / "bg", check_dir=False), name="bg"),

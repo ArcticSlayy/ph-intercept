@@ -126,6 +126,47 @@ async def trigger_gravity_update(http_client: httpx.AsyncClient) -> dict:
         return {"error": "internal error"}
 
 
+async def toggle_p2_blocking(http_client: httpx.AsyncClient, enable: bool, timer: int | None = None) -> dict:
+    try:
+        if not await _p2_ensure_auth(http_client):
+            return {"error": "auth failed"}
+        resp = await http_client.post(
+            f"{PIHOLE2_URL}/dns/blocking",
+            content=json.dumps({"blocking": enable, "timer": timer}),
+            headers={**( {"X-FTL-SID": _p2_pihole_sid} if _p2_pihole_sid else {} ), "Content-Type": "application/json"},
+        )
+        if resp.status_code == 401:
+            await _p2_drop_session(http_client)
+            return {"error": "session expired"}
+        data = resp.json()
+        return {"blocking": data["blocking"] == "enabled" if "blocking" in data else enable}
+    except Exception:
+        logger.exception("toggle_p2_blocking failed")
+        return {"error": "internal error"}
+
+
+async def trigger_p2_gravity_update(http_client: httpx.AsyncClient) -> dict:
+    try:
+        if not await _p2_ensure_auth(http_client):
+            return {"error": "auth failed"}
+        resp = await http_client.post(
+            f"{PIHOLE2_URL}/action/gravity",
+            headers={"X-FTL-SID": _p2_pihole_sid} if _p2_pihole_sid else {},
+            timeout=10.0,
+        )
+        if resp.status_code == 401:
+            await _p2_drop_session(http_client)
+            return {"error": "session expired"}
+        if resp.status_code not in (200, 202, 204):
+            return {"error": f"status {resp.status_code}"}
+        return {"ok": True}
+    except httpx.TimeoutException:
+        return {"error": "timeout"}
+    except Exception:
+        logger.exception("trigger_p2_gravity_update failed")
+        return {"error": "internal error"}
+
+
 async def _broadcast(events: list[dict]) -> None:
     if not events or not _pihole_ws_clients:
         return
