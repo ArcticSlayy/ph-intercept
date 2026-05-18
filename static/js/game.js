@@ -959,7 +959,7 @@
       if (t - _l.born > (_l.style === 'seeker' ? _l.dur + 60 : 300)) p2Lasers.splice(i, 1);
     }
 
-    // Defensive caps — these arrays expire fast and are bounded by game mechanics,
+    // Defensive caps; these arrays expire fast and are bounded by game mechanics,
     // but trim the oldest entries if something anomalous pumps them.
     if (lasers.length > 120) lasers.length = 120;
     if (p2Lasers.length > 120) p2Lasers.length = 120;
@@ -1642,7 +1642,7 @@
       }
       // Redraw hatch structure rows on top of crew so crew appears behind it
       drawBmp(ctx, CARRIER_BMP.slice(1, 3), ccx, ccy - 108, 'rgba(130,145,170,0.88)', 'rgba(100,120,160,0.28)', CARRIER_PX);
-      // Inactive ships drawn after crew — crew always appears underneath parked ships
+      // Inactive ships drawn after crew so crew always appears underneath parked ships
       for (let bi = 0; bi < CARRIER_SHIP_ORDER.length; bi++) {
         const bShip = CARRIER_SHIP_ORDER[bi];
         if (bShip === currentShip || (twoPlayerMode !== 'off' && bShip === p2CurrentShip)) continue;
@@ -1653,7 +1653,7 @@
       // Bay trapdoor effects for P1 ship swap
       if (warpState === 'out' && warpNextShip !== null) { _drawTrapDoor(warpNextShip, true, Math.min(1, (t - warpAt) / (WARP_OUT_DUR * 0.50)), ccx, ccy); }
       if (warpState === 'in' && warpPrevShip !== null) { _drawTrapDoor(warpPrevShip, false, Math.min(1, (t - warpAt) / (WARP_IN_DUR * 0.45)), ccx, ccy); }
-      // Bay trapdoor effects for P2 ship swap (2P mode — shared carrier)
+      // Bay trapdoor effects for P2 ship swap (shared carrier in 2P mode)
       if (twoPlayerMode !== 'off') {
         if (p2WarpState === 'out' && p2WarpNextShip !== null) { _drawTrapDoor(p2WarpNextShip, true, Math.min(1, (t - p2WarpAt) / (WARP_OUT_DUR * 0.50)), ccx, ccy); }
         if (p2WarpState === 'in' && p2WarpPrevShip !== null) { _drawTrapDoor(p2WarpPrevShip, false, Math.min(1, (t - p2WarpAt) / (WARP_IN_DUR * 0.45)), ccx, ccy); }

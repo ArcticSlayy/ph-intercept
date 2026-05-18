@@ -237,6 +237,27 @@ All configuration is via environment variables in `compose.yaml`.
 
 ---
 
+## Local 2-Player Mode
+
+Two Pi-hole instances can run side by side in split-screen. P1's ship occupies the left half of the canvas, P2's ship the right. Each Pi-hole streams its own query events independently.
+
+Add the second Pi-hole to your `compose.yaml` environment block:
+
+```yaml
+PIHOLE2_URL: "http://192.168.1.3:8053/api"
+PIHOLE2_PASSWORD: ${PIHOLE2_PASSWORD}
+```
+
+And add the password to your `.env` file:
+
+```env
+PIHOLE2_PASSWORD=your_second_pihole_password
+```
+
+`PIHOLE2_PASSWORD` can be omitted if the second Pi-hole has no app password set. Setting `PIHOLE2_URL` is all that is required to activate split-screen mode.
+
+---
+
 ## Requirements
 
 - Pi-hole v6 (v5 is not compatible)
