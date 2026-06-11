@@ -13,7 +13,6 @@ on:
       - "adguard/README.md"
       - ".gitattributes"
       - ".gitignore"
-      - ".github/FUNDING.yml"
       - ".github/dependabot.yml"
       - ".github/workflows/codeql.yml"
       - ".github/workflows/develop.yml"
@@ -49,7 +48,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ghcr.io/m00grin/ph-intercept
+          images: ghcr.io/arcticslayy/ph-intercept
           labels: |
             org.opencontainers.image.description=${{ github.event.repository.description }}
             org.opencontainers.image.licenses=${{ github.event.repository.license.spdx_id }}
@@ -62,7 +61,7 @@ jobs:
           context: .
           platforms: linux/amd64,linux/386,linux/arm64,linux/arm/v7,linux/arm/v6,linux/riscv64
           push: true
-          tags: ghcr.io/m00grin/ph-intercept:develop
+          tags: ghcr.io/arcticslayy/ph-intercept:develop
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
           cache-from: type=local,src=/opt/buildx-cache/ph-intercept

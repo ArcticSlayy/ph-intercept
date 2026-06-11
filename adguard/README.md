@@ -25,7 +25,7 @@ Designed to be dropped in alongside an existing AdGuard Home setup with no extra
 ```yaml
 services:
   ph-intercept:
-    image: ghcr.io/m00grin/ph-intercept:latest
+    image: ghcr.io/arcticslayy/ph-intercept:latest
     hostname: ph-intercept
     container_name: ph-intercept
     restart: unless-stopped
