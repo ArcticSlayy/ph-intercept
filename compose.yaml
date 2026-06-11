@@ -1,6 +1,6 @@
 services:
   ph-intercept:
-    image: ghcr.io/m00grin/ph-intercept:latest
+    image: ghcr.io/arcticslayy/ph-intercept:latest
     hostname: ph-intercept
     container_name: ph-intercept
     restart: unless-stopped
@@ -61,8 +61,9 @@ services:
         max-file: "3"
 
     ports:
-      # Host port : container port. Change the left side if 4653 is taken
-      - "4653:4653"
+      # Localhost-only by default. Use "4653:4653" only when placing this
+      # behind LAN/VPN/reverse-proxy auth.
+      - "127.0.0.1:4653:4653"
 
     # Optional: point DNS at your Pi-hole (if used for DNS resolution) or resolver directly (like Unbound)
     # dns:

@@ -1,0 +1,65 @@
+services:
+  ph-intercept-technitium:
+    build: .
+    hostname: ph-intercept-technitium
+    container_name: ph-intercept-technitium
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+          cpus: "1"
+          pids: 20
+
+    environment:
+      PROVIDER: technitium
+      TECHNITIUM_DASHBOARD: "${TECHNITIUM_DASHBOARD:-http://127.0.0.1:5380}"
+      TECHNITIUM_API_URL: "${TECHNITIUM_API_URL:-http://host.docker.internal:5380}"
+      TECHNITIUM_API_TOKEN: "${TECHNITIUM_API_TOKEN:-}"
+      TECHNITIUM_API_USER: "${TECHNITIUM_API_USER:-}"
+      TECHNITIUM_API_PASSWORD: "${TECHNITIUM_API_PASSWORD:-}"
+      TECHNITIUM_API_TOTP: "${TECHNITIUM_API_TOTP:-}"
+      TECHNITIUM_VERIFY_SSL: "${TECHNITIUM_VERIFY_SSL:-true}"
+      TECHNITIUM_API_NODE: "${TECHNITIUM_API_NODE:-}"
+      TECHNITIUM_API_QUERY_LOG_NAME: "${TECHNITIUM_API_QUERY_LOG_NAME:-Query Logs (Sqlite)}"
+      TECHNITIUM_API_QUERY_LOG_CLASS_PATH: "${TECHNITIUM_API_QUERY_LOG_CLASS_PATH:-QueryLogsSqlite.App}"
+      TECHNITIUM_API_STATS_TYPE: "${TECHNITIUM_API_STATS_TYPE:-LastDay}"
+      TECHNITIUM_API_ENTRIES_PER_PAGE: "${TECHNITIUM_API_ENTRIES_PER_PAGE:-50}"
+      TECHNITIUM_API_POLL_SECONDS: "${TECHNITIUM_API_POLL_SECONDS:-1.0}"
+      TECHNITIUM_API_ALLOW_CONTROL: "${TECHNITIUM_API_ALLOW_CONTROL:-false}"
+      TECHNITIUM_REPLAY_RECENT: "${TECHNITIUM_REPLAY_RECENT:-20}"
+      TECHNITIUM_REPLAY_MAX_AGE_SECONDS: "${TECHNITIUM_REPLAY_MAX_AGE_SECONDS:-120}"
+      TECHNITIUM_CLIENT_NAMES: "${TECHNITIUM_CLIENT_NAMES:-}"
+      TECHNITIUM_DOMAIN_LABELS: "${TECHNITIUM_DOMAIN_LABELS:-}"
+      TECHNITIUM_DOMAIN_LABEL_MODE: "${TECHNITIUM_DOMAIN_LABEL_MODE:-prefix}"
+      TECHNITIUM_INFER_DOMAIN_LABELS: "${TECHNITIUM_INFER_DOMAIN_LABELS:-true}"
+      TECHNITIUM_IGNORE_DOMAINS: "${TECHNITIUM_IGNORE_DOMAINS:-}"
+      PH_INTERCEPT_ALLOWED_ORIGINS: "${PH_INTERCEPT_ALLOWED_ORIGINS:-}"
+      PH_INTERCEPT_FRAME_ANCESTORS: "${PH_INTERCEPT_FRAME_ANCESTORS:-'self'}"
+      RETURN_URL: "${RETURN_URL:-http://127.0.0.1:5380}"
+      BG_MODE: "${BG_MODE:-starfield}"
+      BG_IMAGE: "${BG_IMAGE:-}"
+      SKY_PRESET: "${SKY_PRESET:-summer_triangle}"
+
+    volumes:
+      - ./bg:/app/static/bg
+
+    cap_drop:
+      - ALL
+
+    security_opt:
+      - "no-new-privileges:true"
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    ports:
+      # Localhost-only by default. Use "4653:4653" only when placing this
+      # behind LAN/VPN/reverse-proxy auth.
+      - "127.0.0.1:4653:4653"
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

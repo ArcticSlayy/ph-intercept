@@ -1,6 +1,6 @@
 services:
   ph-intercept:
-    image: ghcr.io/m00grin/ph-intercept:latest
+    image: ghcr.io/arcticslayy/ph-intercept:latest
     hostname: ph-intercept
     container_name: ph-intercept
     restart: unless-stopped

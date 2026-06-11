@@ -1,9 +1,14 @@
 // ── Pi-hole DNS game mode ─────────────────────────────────────────────
 (function() {
+  try {
   const canvas = document.getElementById('pihole-canvas');
   const ctx = canvas.getContext('2d');
   const phLinkEl = document.getElementById('pihole-link');
   const PROVIDER = window.PROVIDER || 'pihole';
+  const READ_ONLY_PROVIDER = window.READ_ONLY_PROVIDER ?? (PROVIDER === 'technitium');
+  const PROVIDER_LABEL = PROVIDER === 'adguard' ? 'ADGUARD' : PROVIDER === 'technitium' ? 'TECHNITIUM' : 'PI-HOLE';
+  const FILTER_LABEL = PROVIDER === 'adguard' ? 'FILTER' : PROVIDER === 'technitium' ? 'OBSERVED' : 'GRAVITY';
+  const FILTER_SUBLABEL = PROVIDER === 'technitium' ? 'blocked seen' : 'known threats';
   const settingsBtnEl = document.getElementById('settings-btn');
   let W = 0, H = 0;
 
@@ -21,6 +26,7 @@
   const drone2Missiles = [];
   let hudGravity = null;
   let hudStats = { blocked: null, queries: null, percent: null };
+  let hudError = '';
   let hudStatsPollTimer = null, _onVisible = null, _onFocus = null, _sleepCheckTimer = null, _exitTimer = null;
   let gravityState = 'idle'; // 'idle' | 'updating' | 'done'
   let gravityDoneAt = 0;
@@ -64,6 +70,27 @@
   let showFriendlies = true;
   let showDomain     = true;
   let showClient     = false;
+  let multiClientDefenders = false;
+  let maxClientDefenders = 4;
+  const MAX_CLIENT_DEFENDER_OPTIONS = [2, 3, 4, 6, 8];
+  const CLIENT_DEFENDER_IDLE_MS = 120000;
+  const clientDefenders = new Map();
+  const DEFENDER_PALETTE = [
+    ['rgba(80,220,255,0.95)',  'rgba(60,200,255,0.48)'],
+    ['rgba(255,205,80,0.95)',  'rgba(255,175,60,0.45)'],
+    ['rgba(120,255,170,0.95)', 'rgba(90,235,150,0.45)'],
+    ['rgba(255,130,190,0.95)', 'rgba(255,100,170,0.42)'],
+    ['rgba(180,150,255,0.95)', 'rgba(155,125,255,0.44)'],
+    ['rgba(255,150,90,0.95)',  'rgba(255,115,70,0.42)'],
+    ['rgba(165,235,255,0.95)', 'rgba(120,210,255,0.42)'],
+    ['rgba(235,255,120,0.95)', 'rgba(210,245,80,0.38)'],
+  ];
+  const DEFENDER_ACCENTS = [
+    'rgba(255,255,255,0.68)',
+    'rgba(100,255,175,0.78)',
+    'rgba(255,220,90,0.78)',
+    'rgba(120,205,255,0.78)',
+  ];
   (function _loadDisplaySettings() {
     try {
       const s = JSON.parse(localStorage.getItem('ph_display'));
@@ -71,11 +98,173 @@
         if (s.friendlies != null) showFriendlies = !!s.friendlies;
         if (s.domain     != null) showDomain     = !!s.domain;
         if (s.client     != null) showClient      = !!s.client;
+        if (s.multiClientDefenders != null) multiClientDefenders = !!s.multiClientDefenders;
+        if (s.maxClientDefenders != null) {
+          const n = Number(s.maxClientDefenders);
+          if (MAX_CLIENT_DEFENDER_OPTIONS.includes(n)) maxClientDefenders = n;
+        }
       }
     } catch {}
   })();
   function _saveDisplaySettings() {
-    try { localStorage.setItem('ph_display', JSON.stringify({ friendlies: showFriendlies, domain: showDomain, client: showClient })); } catch {}
+    try {
+      localStorage.setItem('ph_display', JSON.stringify({
+        friendlies: showFriendlies,
+        domain: showDomain,
+        client: showClient,
+        multiClientDefenders,
+        maxClientDefenders,
+      }));
+    } catch {}
+  }
+  function _hashString(s) {
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+  function _clientKey(client) {
+    return (client && String(client).trim()) || '';
+  }
+  function _activeDefenderKeys() {
+    const activeKeys = new Set();
+    for (const e of entities) {
+      if (e.type === 'blocked' && e.state !== 'shot' && e.defenderKey) activeKeys.add(e.defenderKey);
+    }
+    for (const l of lasers) {
+      if (l.defenderKey) activeKeys.add(l.defenderKey);
+    }
+    return activeKeys;
+  }
+  function _pruneIdleClientDefenders(now = performance.now()) {
+    if (!clientDefenders.size) return;
+    const activeKeys = _activeDefenderKeys();
+    for (const [key, def] of clientDefenders) {
+      if (!activeKeys.has(key) && now - def.lastSeen > CLIENT_DEFENDER_IDLE_MS) {
+        clientDefenders.delete(key);
+      }
+    }
+  }
+  function _touchClientDefender(client, now = performance.now()) {
+    if (!multiClientDefenders) return null;
+    const key = _clientKey(client);
+    if (!key) return null;
+    let def = clientDefenders.get(key);
+    if (!def) {
+      while (clientDefenders.size >= maxClientDefenders) {
+        const activeKeys = _activeDefenderKeys();
+        let evictKey = null, evictAt = Infinity;
+        for (const [k, d] of clientDefenders) {
+          if (!activeKeys.has(k) && d.lastSeen < evictAt) { evictKey = k; evictAt = d.lastSeen; }
+        }
+        if (!evictKey) {
+          for (const [k, d] of clientDefenders) {
+            if (d.lastSeen < evictAt) { evictKey = k; evictAt = d.lastSeen; }
+          }
+        }
+        if (!evictKey) break;
+        clientDefenders.delete(evictKey);
+      }
+      const h = _hashString(key);
+      const pal = DEFENDER_PALETTE[h % DEFENDER_PALETTE.length];
+      def = {
+        key,
+        label: key,
+        ship: CARRIER_SHIP_ORDER[h % CARRIER_SHIP_ORDER.length],
+        color: pal[0],
+        glow: pal[1],
+        accent: DEFENDER_ACCENTS[(h >>> 3) % DEFENDER_ACCENTS.length],
+        variant: (h >>> 5) % 4,
+        phase: (h % 628) / 100,
+        drift: (((h >>> 10) % 100) - 50) / 50,
+        laneW: 0,
+        lastSeen: now,
+        renderX: 0,
+        renderY: 0,
+      };
+      clientDefenders.set(key, def);
+    }
+    def.lastSeen = now;
+    return def;
+  }
+  function _visibleClientDefenders() {
+    if (!multiClientDefenders) return [];
+    _pruneIdleClientDefenders();
+    return [...clientDefenders.values()]
+      .sort((a, b) => b.lastSeen - a.lastSeen)
+      .slice(0, maxClientDefenders)
+      .sort((a, b) => a.key.localeCompare(b.key));
+  }
+  function _layoutClientDefenders(t) {
+    const roster = _visibleClientDefenders();
+    if (!roster.length) return roster;
+    const sidePad = Math.max(36, Math.min(72, W * 0.055));
+    const minLaneW = W < 720 ? 148 : 166;
+    const usableW = Math.max(1, W - sidePad * 2);
+    const maxPerRow = Math.max(1, Math.min(roster.length, Math.floor(usableW / minLaneW) || 1));
+    const rows = Math.ceil(roster.length / maxPerRow);
+    const rowGap = Math.max(66, Math.min(88, H * 0.092));
+    const bottomY = Math.max(120, H - hudSH - safeBottom - 86);
+    const topY = Math.max(90, bottomY - (rows - 1) * rowGap);
+    for (let i = 0; i < roster.length; i++) {
+      const def = roster[i];
+      const row = Math.floor(i / maxPerRow);
+      const col = i % maxPerRow;
+      const rowStart = row * maxPerRow;
+      const rowCount = Math.min(maxPerRow, roster.length - rowStart);
+      const laneW = usableW / (rowCount + 1);
+      const x = sidePad + laneW * (col + 1);
+      const yBase = topY + row * rowGap;
+      const xWobble = Math.min(12, Math.max(4, laneW * 0.045));
+      const stagger = rowCount > 1 ? (col % 2 === 0 ? -4 : 5) : 0;
+      def.laneW = laneW;
+      def.renderX = Math.max(48, Math.min(W - 48, x + Math.sin(t * 0.0008 + def.phase) * xWobble + def.drift * xWobble * 0.35));
+      def.renderY = yBase + stagger + Math.sin(t * 0.0012 + def.phase) * 5;
+    }
+    return roster;
+  }
+  function _defenderForEntity(ent) {
+    if (!multiClientDefenders || !ent || !ent.defenderKey) return null;
+    return clientDefenders.get(ent.defenderKey) || null;
+  }
+  function _ownedBySquadron(ent) {
+    return !!(multiClientDefenders && ent && ent.defenderKey);
+  }
+  function _defenderGunTips(def) {
+    return def ? shipGunTipPos(def.ship, Math.round(def.renderX), Math.round(def.renderY)) : null;
+  }
+  function _cycleMaxClientDefenders() {
+    const idx = MAX_CLIENT_DEFENDER_OPTIONS.indexOf(maxClientDefenders);
+    maxClientDefenders = MAX_CLIENT_DEFENDER_OPTIONS[(idx + 1) % MAX_CLIENT_DEFENDER_OPTIONS.length];
+    while (clientDefenders.size > maxClientDefenders) {
+      let evictKey = null, evictAt = Infinity;
+      for (const [k, d] of clientDefenders) {
+        if (d.lastSeen < evictAt) { evictKey = k; evictAt = d.lastSeen; }
+      }
+      if (!evictKey) break;
+      clientDefenders.delete(evictKey);
+    }
+    _saveDisplaySettings();
+  }
+  function _stowSupportDrones() {
+    drone.state = 'docked'; drone.x = 0; drone.y = 0; drone.lastFire = 0;
+    drone.side = 0; drone.angle = 0; drone.targetX = null; drone.targetY = null;
+    drone.deployedAt = 0; drone.recallAt = 0;
+    droneMissiles.length = 0;
+    drone2.state = 'docked'; drone2.x = 0; drone2.y = 0; drone2.lastFire = 0;
+    drone2.side = 0; drone2.angle = 0; drone2.targetX = null; drone2.targetY = null;
+    drone2.deployedAt = 0; drone2.recallAt = 0;
+    drone2Missiles.length = 0;
+  }
+  function _assignSquadronDefendersToExisting(now = performance.now()) {
+    if (!multiClientDefenders) return;
+    for (const ent of entities) {
+      if (ent.state === 'shot') continue;
+      const defender = _touchClientDefender(ent.client, now);
+      if (defender && ent.type === 'blocked') ent.defenderKey = defender.key;
+    }
   }
   let currentShip = 'protector';  // 'protector'|'falcon'|'swordfish'|'enterprise'|'serenity'|'normandy'|'pes'
   let warpState = 'none';         // 'none' | 'out' | 'in'
@@ -222,13 +411,112 @@
     }
   }
 
+  function _middleEllipsize(text, maxChars) {
+    text = String(text || '');
+    if (text.length <= maxChars) return text;
+    if (maxChars <= 3) return text.slice(0, maxChars);
+    const keep = maxChars - 3;
+    const left = Math.ceil(keep * 0.58);
+    const right = Math.floor(keep * 0.42);
+    return text.slice(0, left) + '...' + text.slice(text.length - right);
+  }
+
+  function _labelLines(text, maxLineChars = 30, maxLines = 2) {
+    text = String(text || '');
+    const parts = text.split(': ');
+    if (parts.length > 1) {
+      const family = parts.shift();
+      const rest = parts.join(': ');
+      return [
+        _middleEllipsize(family, Math.min(maxLineChars, 24)),
+        _middleEllipsize(rest, maxLineChars),
+      ].filter(Boolean).slice(0, maxLines);
+    }
+    if (maxLines > 1 && /\s/.test(text)) {
+      const words = text.split(/\s+/).filter(Boolean);
+      const lines = [];
+      let current = '';
+      for (let wi = 0; wi < words.length; wi++) {
+        const word = words[wi];
+        const next = current ? `${current} ${word}` : word;
+        if (next.length <= maxLineChars || !current) {
+          current = next;
+        } else {
+          lines.push(_middleEllipsize(current, maxLineChars));
+          current = word;
+          if (lines.length >= maxLines - 1) {
+            const rest = words.slice(wi).join(' ');
+            current = rest || current;
+            break;
+          }
+        }
+      }
+      if (current && lines.length < maxLines) lines.push(_middleEllipsize(current, maxLineChars));
+      if (lines.length) return lines;
+    }
+    return [_middleEllipsize(text, maxLineChars)];
+  }
+
+  function _drawLabelLines(lines, x, y, lineHeight = 13) {
+    for (let i = 0; i < lines.length; i++) {
+      ctx.fillText(lines[i], x, y + i * lineHeight);
+    }
+  }
+
+  function _drawDefenderAccent(def, dx, dy, dbmp) {
+    const halfW = bmpW(dbmp) * PX / 2;
+    const halfH = bmpH(dbmp) * PX / 2;
+    ctx.save();
+    ctx.strokeStyle = def.accent;
+    ctx.fillStyle = def.accent;
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = def.glow;
+    ctx.shadowBlur = 6;
+    ctx.globalAlpha = 0.78;
+    if (def.variant === 0) {
+      ctx.beginPath();
+      ctx.moveTo(dx - halfW - 7, dy + halfH - 2);
+      ctx.lineTo(dx - halfW - 1, dy + halfH + 4);
+      ctx.lineTo(dx - halfW + 7, dy + halfH + 4);
+      ctx.moveTo(dx + halfW + 7, dy + halfH - 2);
+      ctx.lineTo(dx + halfW + 1, dy + halfH + 4);
+      ctx.lineTo(dx + halfW - 7, dy + halfH + 4);
+      ctx.stroke();
+    } else if (def.variant === 1) {
+      ctx.fillRect(Math.round(dx - 10), Math.round(dy + halfH + 6), 20, 2);
+      ctx.fillRect(Math.round(dx - 2), Math.round(dy + halfH + 2), 4, 2);
+    } else if (def.variant === 2) {
+      ctx.beginPath();
+      ctx.arc(dx - halfW - 5, dy + 1, 2.5, 0, Math.PI * 2);
+      ctx.arc(dx + halfW + 5, dy + 1, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(dx, dy - halfH - 13);
+      ctx.lineTo(dx + 5, dy - halfH - 8);
+      ctx.lineTo(dx, dy - halfH - 3);
+      ctx.lineTo(dx - 5, dy - halfH - 8);
+      ctx.closePath();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   // ── Entity management ─────────────────────────────────────────────
   function spawnEntity(ev) {
     if (ev.status === 'allowed' && !showFriendlies) return;
     const blocked = ev.status === 'blocked';
     const isCache = ev.source === 'cache';
-    const existing = entities.find(e => e.domain === ev.domain && e.type === ev.status && e.state !== 'shot');
+    const now = performance.now();
+    const defender = multiClientDefenders ? _touchClientDefender(ev.client, now) : null;
+    const existing = entities.find(e =>
+      e.domain === ev.domain &&
+      e.type === ev.status &&
+      e.state !== 'shot' &&
+      (!multiClientDefenders || (e.client || '') === (ev.client || ''))
+    );
     if (existing) {
+      if (blocked && defender) existing.defenderKey = defender.key;
       const prevTier = Math.min(existing.count, 3);
       existing.count++;
       const newTier = Math.min(existing.count, 3);
@@ -249,7 +537,6 @@
     }
     if (entities.length >= 50) return;
 
-    const now = performance.now();
     let x, y, vx, vy, headStart = 0;
     if (blocked) {
       const spd = 0.055 + Math.random() * 0.03;
@@ -279,6 +566,7 @@
       wobble: Math.random() * Math.PI * 2,
       domain: ev.domain,
       client: ev.client || '',
+      defenderKey: blocked && defender ? defender.key : '',
       spawnTime: now - headStart,
       appearAt: now,
       state: 'alive',  // alive | targeted | seeker-incoming | shot
@@ -297,22 +585,27 @@
     ent.mutateAt = 0;
     const now = performance.now();
     const tier = Math.min(ent.count, 3);
+    const squadronOwned = _ownedBySquadron(ent);
+    let defender = _defenderForEntity(ent);
+    if (squadronOwned && !defender) defender = _touchClientDefender(ent.client, now);
+    if (squadronOwned && !defender) return;
+    const defenderTips = _defenderGunTips(defender);
     let seekerFire = false;
     if (tier >= 3) {
       if (Math.random() < 0.5) {
         // Beam style - triple spread from left gun, nose, right gun
         ent.state = 'shot';
         const sp = 10;
-        lasers.push({ side: 0, tier, x1: ent.x - sp, y1: ent.y, born: now });
-        lasers.push({ side: 2, tier, x1: ent.x,      y1: ent.y, born: now });
-        lasers.push({ side: 1, tier, x1: ent.x + sp, y1: ent.y, born: now });
+        lasers.push({ side: 0, tier, x1: ent.x - sp, y1: ent.y, born: now, target: ent, defenderKey: defender ? defender.key : '' });
+        lasers.push({ side: 2, tier, x1: ent.x,      y1: ent.y, born: now, target: ent, defenderKey: defender ? defender.key : '' });
+        lasers.push({ side: 1, tier, x1: ent.x + sp, y1: ent.y, born: now, target: ent, defenderKey: defender ? defender.key : '' });
       } else {
         // Seeker style - 5 rapid bolts from nose gun, each arcing a different path to target
         // Delay explosion until the last bolt arrives (born offset 4*30 + dur 210 = 330ms)
         seekerFire = true;
         ent.state = 'seeker-incoming';
         ent.detonateAt = now + 330;
-        const gtp0 = shipGunTipPos(currentShip, Math.round(shipX), Math.round(shipY));
+        const gtp0 = defenderTips || shipGunTipPos(currentShip, Math.round(shipX), Math.round(shipY));
         const sx0 = gtp0.nx, sy0 = gtp0.ny;
         const tx = ent.x, ty = ent.y;
         const ddx = tx - sx0, ddy = ty - sy0, ddist = Math.hypot(ddx, ddy) || 1;
@@ -321,7 +614,7 @@
         const offsets = [-52, 38, -24, 58, -10];
         for (let bi = 0; bi < offsets.length; bi++) {
           const off = offsets[bi] + (Math.random() - 0.5) * 18;
-          lasers.push({ style: 'seeker', tier, target: ent,
+          lasers.push({ style: 'seeker', tier, target: ent, defenderKey: defender ? defender.key : '',
                         x0: sx0, y0: sy0, x1: tx, y1: ty,
                         cpx: midX + px * off, cpy: midY + py * off,
                         born: now + bi * 30, dur: 210 });
@@ -330,14 +623,14 @@
     } else if (tier === 2) {
       // Double: both wing guns converge on target
       ent.state = 'shot';
-      lasers.push({ side: 0, tier, x1: ent.x, y1: ent.y, born: now });
-      lasers.push({ side: 1, tier, x1: ent.x, y1: ent.y, born: now });
+      lasers.push({ side: 0, tier, x1: ent.x, y1: ent.y, born: now, target: ent, defenderKey: defender ? defender.key : '' });
+      lasers.push({ side: 1, tier, x1: ent.x, y1: ent.y, born: now, target: ent, defenderKey: defender ? defender.key : '' });
     } else {
       // Single: alternating gun
       ent.state = 'shot';
       const side = lastGun;
       lastGun = 1 - lastGun;
-      lasers.push({ side, tier, x1: ent.x, y1: ent.y, born: now });
+      lasers.push({ side, tier, x1: ent.x, y1: ent.y, born: now, target: ent, defenderKey: defender ? defender.key : '' });
     }
     if (!seekerFire) {
       const ps = [];
@@ -409,7 +702,7 @@
           createExplosionFromBmp(bmp, e.x, e.y, e.killedBy, color);
           if (showDomain) {
             const _fBase = e.y + bmpH(bmp) * PX / 2 + 13;
-            createDomainFragments(e.domain, e.x, (showClient && e.client) ? _fBase + 14 : _fBase, tier);
+            createDomainFragments(e.domain, e.x, (showClient && e.client && !multiClientDefenders) ? _fBase + 14 : _fBase, tier);
           }
           entities.splice(i, 1);
           continue;
@@ -429,6 +722,9 @@
       if (t < l.born) continue;
       if (l.style === 'seeker') continue; // detonation handled by timer, not proximity to destination
       for (const e of entities) {
+        if (l.target && e !== l.target) continue;
+        if (l.defenderKey && e.defenderKey !== l.defenderKey) continue;
+        if (!l.defenderKey && _ownedBySquadron(e)) continue;
         if (e.state === 'alive' && Math.hypot(e.x - l.x1, e.y - l.y1) < 25) {
           e.state = 'shot';
           e.killedBy = l.tier;
@@ -439,14 +735,18 @@
     }
     // Ship movement - passive hover drift + idle wander; track targeted enemy
     activeEnemies = 0;
+    let mainShipActiveEnemies = 0;
     for (const e of entities) {
-      if (e.type === 'blocked' && e.state !== 'shot') activeEnemies++;
+      if (e.type === 'blocked' && e.state !== 'shot') {
+        activeEnemies++;
+        if (!_ownedBySquadron(e)) mainShipActiveEnemies++;
+      }
     }
-    if (activeEnemies > 0) lastEnemyAt = t;
+    if (mainShipActiveEnemies > 0) lastEnemyAt = t;
     idleBlend = shipPowerState === 'up' ? Math.min(1, Math.max(0, (t - lastEnemyAt - 15000) / 2000)) : 0;
     const passiveDrift = 5 * Math.sin(t * 0.00038) + 2 * Math.sin(t * 0.00067);
     const idleDrift = idleBlend * 26 * Math.sin(t * 0.00021);
-    const targeted = entities.find(e => e.state === 'targeted');
+    const targeted = entities.find(e => e.state === 'targeted' && !_ownedBySquadron(e));
     const _carrierCX = W * 0.40;
     const _shipBayIdx = CARRIER_SHIP_ORDER.indexOf(currentShip);
     const _activeBayX = _carrierCX + (_shipBayIdx >= 0 ? CARRIER_BAY_DX[_shipBayIdx] : 0);
@@ -473,7 +773,7 @@
       goalYLerp = 0.02;
     } else {
       const startupSurge = shipPowerState === 'startup' ? -22 * Math.min(1, (t - startupAt) / STARTUP_DUR) : 0;
-      goalY = H * 0.65 + (shipPowerState === 'up' && activeEnemies > 0 ? -42 : 0) + startupSurge;
+      goalY = H * 0.65 + (shipPowerState === 'up' && mainShipActiveEnemies > 0 ? -42 : 0) + startupSurge;
       goalYLerp = 0.0008;
     }
     shipY += (goalY - shipY) * Math.min(1, goalYLerp * dt);
@@ -482,7 +782,7 @@
     const droneHoverX = shipX + drone.side * 110;
     const droneHoverY = shipY - 65;
     if (shipPowerState !== 'up' && drone.state !== 'docked' && drone.state !== 'docking') drone.state = 'docking';
-    if (drone.state === 'docked' && activeEnemies >= DRONE_DEPLOY_THRESHOLD && shipPowerState === 'up') {
+    if (drone.state === 'docked' && mainShipActiveEnemies >= DRONE_DEPLOY_THRESHOLD && shipPowerState === 'up') {
       drone.side = Math.random() < 0.5 ? -1 : 1;
       drone.angle = 0; drone.targetX = null; drone.targetY = null;
       drone.deployedAt = t; drone.recallAt = 0;
@@ -499,7 +799,7 @@
       explosions.push({ ps: lps, born: t, dur: 380 });
     }
     if (drone.state === 'launching' || drone.state === 'active') {
-      if (activeEnemies >= DRONE_RECALL_THRESHOLD) {
+      if (mainShipActiveEnemies >= DRONE_RECALL_THRESHOLD) {
         drone.recallAt = 0;
       } else {
         if (drone.recallAt === 0) drone.recallAt = t;
@@ -516,8 +816,8 @@
       drone.x += (droneHoverX - drone.x) * Math.min(1, 0.003 * dt);
       drone.y += ((droneHoverY + droneBob) - drone.y) * Math.min(1, 0.003 * dt);
       if (shipPowerState === 'up' && t - drone.lastFire > DRONE_FIRE_INTERVAL) {
-        const droneTargets = entities.filter(e => e.type === 'blocked' && Math.min(e.count, 3) < 3 && e.state !== 'shot' && e.state !== 'targeted' && e.state !== 'seeker-incoming' && !droneMissiles.some(m => m.target === e) && !drone2Missiles.some(m => m.target === e) && e.x >= 120 && e.x <= W - 120 && e.y >= 100 && e.y <= H - hudSH - safeBottom - 30);
-        const shipHasTarget = entities.some(e => e.state === 'targeted');
+        const droneTargets = entities.filter(e => e.type === 'blocked' && !_ownedBySquadron(e) && Math.min(e.count, 3) < 3 && e.state !== 'shot' && e.state !== 'targeted' && e.state !== 'seeker-incoming' && !droneMissiles.some(m => m.target === e) && !drone2Missiles.some(m => m.target === e) && e.x >= 120 && e.x <= W - 120 && e.y >= 100 && e.y <= H - hudSH - safeBottom - 30);
+        const shipHasTarget = entities.some(e => e.state === 'targeted' && !_ownedBySquadron(e));
         if (droneTargets.length && (droneTargets.length > 1 || shipHasTarget)) {
           const tgt = droneTargets[Math.floor(Math.random() * droneTargets.length)];
           drone.targetX = tgt.x; drone.targetY = tgt.y;
@@ -549,7 +849,7 @@
     const drone2HoverX = shipX + drone2.side * 110;
     const drone2HoverY = shipY - 58;
     if (shipPowerState !== 'up' && drone2.state !== 'docked' && drone2.state !== 'docking') drone2.state = 'docking';
-    if (drone2.state === 'docked' && activeEnemies >= DRONE2_DEPLOY_THRESHOLD && shipPowerState === 'up') {
+    if (drone2.state === 'docked' && mainShipActiveEnemies >= DRONE2_DEPLOY_THRESHOLD && shipPowerState === 'up') {
       drone2.side = drone.side !== 0 ? -drone.side : (Math.random() < 0.5 ? -1 : 1);
       drone2.angle = 0; drone2.targetX = null; drone2.targetY = null;
       drone2.deployedAt = t; drone2.recallAt = 0;
@@ -565,7 +865,7 @@
       explosions.push({ ps: lps2, born: t, dur: 380 });
     }
     if (drone2.state === 'launching' || drone2.state === 'active') {
-      if (activeEnemies >= DRONE2_RECALL_THRESHOLD) {
+      if (mainShipActiveEnemies >= DRONE2_RECALL_THRESHOLD) {
         drone2.recallAt = 0;
       } else {
         if (drone2.recallAt === 0) drone2.recallAt = t;
@@ -582,10 +882,10 @@
       drone2.x += (drone2HoverX - drone2.x) * Math.min(1, 0.003 * dt);
       drone2.y += ((drone2HoverY + drone2Bob) - drone2.y) * Math.min(1, 0.003 * dt);
       if (shipPowerState === 'up' && t - drone2.lastFire > DRONE2_FIRE_INTERVAL) {
-        const drone2Targets = entities.filter(e => e.type === 'blocked' && Math.min(e.count, 3) < 3 && e.state !== 'shot' && e.state !== 'targeted' && e.state !== 'seeker-incoming'
+        const drone2Targets = entities.filter(e => e.type === 'blocked' && !_ownedBySquadron(e) && Math.min(e.count, 3) < 3 && e.state !== 'shot' && e.state !== 'targeted' && e.state !== 'seeker-incoming'
           && !droneMissiles.some(m => m.target === e) && !drone2Missiles.some(m => m.target === e)
           && e.x >= 120 && e.x <= W - 120 && e.y >= 100 && e.y <= H - hudSH - safeBottom - 30);
-        const ship2HasTarget = entities.some(e => e.state === 'targeted');
+        const ship2HasTarget = entities.some(e => e.state === 'targeted' && !_ownedBySquadron(e));
         if (drone2Targets.length && (drone2Targets.length > 1 || ship2HasTarget)) {
           const tgt = drone2Targets[Math.floor(Math.random() * drone2Targets.length)];
           drone2.targetX = tgt.x; drone2.targetY = tgt.y;
@@ -803,12 +1103,27 @@
       }
     }
 
-    render(t);
+    try {
+      render(t);
+    } catch (err) {
+      window.__phLastRenderError = {
+        name: err && err.name,
+        message: err && err.message,
+        stack: err && err.stack,
+        at: Date.now(),
+      };
+      console.error('ph-intercept render failed', err);
+      if (settingsBtnEl) {
+        settingsBtnEl.style.opacity = '';
+        settingsBtnEl.style.pointerEvents = '';
+        settingsBtnEl.style.transition = '';
+      }
+    }
 
   }
 
   const _phIcon = new Image();
-  _phIcon.src = PROVIDER === 'adguard' ? '/static/icons/adguard.svg' : '/static/icons/pihole.svg';
+  _phIcon.src = PROVIDER === 'adguard' ? '/static/icons/adguard.svg' : PROVIDER === 'technitium' ? '/static/icons/technitium.svg' : '/static/icons/pihole.svg';
 
   const _SHIP_CONFIGS = {
     protector:  { bmp: PROTECTOR_BMP,     color: 'rgba(195,208,240,0.95)', glow: 'rgba(170,190,235,0.55)', dimColor: 'rgba(195,208,240,0.55)',
@@ -832,6 +1147,16 @@
   // ── Render ────────────────────────────────────────────────────────
   function render(t) {
     ctx.clearRect(0, 0, W, H);
+    const SH = hudSH;
+    const SY = H - SH - safeBottom;
+    const _fs = W < 480 ? 0.75 : W < 660 ? 0.87 : 1;
+    const _fVal   = Math.max(10, Math.round(16 * _fs));
+    const _fSub   = Math.max(8,  Math.round(10 * _fs));
+    const _fLabel = _fs < 1 ? 8 : 10;
+    const _fShip  = Math.max(8,  Math.round(12 * _fs));
+    const _yLabel = SY + Math.round(SH * 0.185);
+    const _yVal   = SY + Math.round(SH * 0.574);
+    const _ySub   = SY + Math.round(SH * 0.745);
 
     // Screen shake - decaying oscillation on warp-out blast
     const shakeAge = t - shakeAt;
@@ -1281,29 +1606,28 @@
 
       // Domain / client labels (always upright)
       const la = e.type === 'blocked' ? alpha : e.labelAlpha * alpha;
-      if (la > 0.02 && (showDomain || showClient)) {
+      const showEntityClient = showClient && !multiClientDefenders;
+      if (la > 0.02 && (showDomain || showEntityClient)) {
         const tier = Math.min(e.count, 3);
         const lbmp = e.type === 'blocked'
           ? (tier >= 3 ? E3 : tier === 2 ? E2 : (e.design === 0 ? E0 : E1))
           : (tier >= 3 ? F4 : tier === 2 ? F3 : [F0, F1, F2][e.design % 3]);
         const baseY = ey + (bmpH(lbmp) * EPX / 2) + 13;
-        const both = showDomain && showClient;
+        const both = showDomain && showEntityClient;
         ctx.save();
         ctx.globalAlpha = la * 0.85;
-        if (showClient && e.client) {
+        if (showEntityClient && e.client) {
           ctx.fillStyle = 'rgba(130,185,225,0.80)';
-          const cli = e.client.length > 32 ? '…' + e.client.slice(-30) : e.client;
-          ctx.fillText(cli, ex, baseY);
+          ctx.fillText(_middleEllipsize(e.client, 30), ex, baseY);
         }
         if (showDomain) {
-          const domY = both && showClient && e.client ? baseY + 14 : baseY;
+          const domY = both && showEntityClient && e.client ? baseY + 14 : baseY;
           if (e.type === 'blocked') {
             ctx.fillStyle = tier >= 3 ? 'rgba(200,100,255,1)' : tier === 2 ? 'rgba(255,160,60,1)' : 'rgba(255,120,100,1)';
           } else {
             ctx.fillStyle = 'rgba(150,230,175,0.72)';
           }
-          const dom = e.domain.length > 32 ? '…' + e.domain.slice(-30) : e.domain;
-          ctx.fillText(dom, ex, domY);
+          _drawLabelLines(_labelLines(e.domain, 28, 2), ex, domY, 13);
         }
         ctx.restore();
       }
@@ -1367,16 +1691,21 @@
     const cx = Math.round(shipX);
     const cy = Math.round(shipY + passiveBob);
     const gtp = shipGunTipPos(currentShip, cx, cy);
+    const clientDefenderRoster = _layoutClientDefenders(t);
+    const squadronModeActive = multiClientDefenders && shipPowerState === 'up' && warpState === 'none' && clientDefenderRoster.length > 0;
 
     // Laser lines - before ship so hull covers the origin end
     for (const l of lasers) {
+      const laserDef = l.defenderKey ? clientDefenders.get(l.defenderKey) : null;
+      if (l.defenderKey && !laserDef) continue;
+      const lGtp = laserDef ? _defenderGunTips(laserDef) : gtp;
       if (l.style === 'seeker') {
         const age = t - l.born;
         if (age < 0 || age > l.dur + 60) continue;
         const prog = Math.min(1, age / l.dur);
         const inv = 1 - prog;
         // Translate bezier so origin tracks the live nose gun tip (fixes floating after ship recoil)
-        const odx = gtp.nx - l.x0, ody = gtp.ny - l.y0;
+        const odx = lGtp.nx - l.x0, ody = lGtp.ny - l.y0;
         const ox = l.x0 + odx, oy = l.y0 + ody;
         const cpx = l.cpx + odx, cpy = l.cpy + ody;
         const ex1 = l.target && l.target.state === 'seeker-incoming' ? l.target.x : l.x1;
@@ -1433,8 +1762,8 @@
         ctx.restore();
       } else {
         const a = Math.max(0, 1 - (t - l.born) / 300);
-        const sx = l.side === 2 ? gtp.nx : l.side === 1 ? gtp.rx : gtp.lx;
-        const sy = l.side === 2 ? gtp.ny : gtp.gy;
+        const sx = l.side === 2 ? lGtp.nx : l.side === 1 ? lGtp.rx : lGtp.lx;
+        const sy = l.side === 2 ? lGtp.ny : lGtp.gy;
         const [lCol, lGlow] = l.tier >= 3
           ? ['#ffdd44', 'rgba(255,200,40,0.8)']
           : l.tier === 2
@@ -1452,7 +1781,7 @@
     }
 
     // Drone missiles (traveling) and sprite (rotated toward target)
-    if (drone.state !== 'docked') {
+    if (!squadronModeActive && drone.state !== 'docked') {
       const dAlpha = drone.state === 'docking'
         ? Math.min(1, Math.hypot(drone.x - shipX, drone.y - shipY) / 45)
         : 1;
@@ -1508,7 +1837,7 @@
     }
 
     // Drone 2 missiles and sprite
-    if (drone2.state !== 'docked') {
+    if (!squadronModeActive && drone2.state !== 'docked') {
       const d2Alpha = drone2.state === 'docking'
         ? Math.min(1, Math.hypot(drone2.x - shipX, drone2.y - shipY) / 45)
         : 1;
@@ -1566,8 +1895,11 @@
       for (const gl of lasers) {
         const glAge = t - gl.born;
         if (glAge < 0 || glAge >= 120) continue;
-        const fx = gl.style === 'seeker' ? gl.x0 : gl.side === 2 ? gtp.nx : gl.side === 1 ? gtp.rx : gtp.lx;
-        const fy = gl.style === 'seeker' ? gl.y0 : gl.side === 2 ? gtp.ny : gtp.gy;
+        const flashDef = gl.defenderKey ? clientDefenders.get(gl.defenderKey) : null;
+        if (gl.defenderKey && !flashDef) continue;
+        const flashGtp = flashDef ? _defenderGunTips(flashDef) : gtp;
+        const fx = gl.style === 'seeker' ? flashGtp.nx : gl.side === 2 ? flashGtp.nx : gl.side === 1 ? flashGtp.rx : flashGtp.lx;
+        const fy = gl.style === 'seeker' ? flashGtp.ny : gl.side === 2 ? flashGtp.ny : flashGtp.gy;
         const [fCol, fGlow] = gl.tier >= 3
           ? ['rgba(255,220,70,0.9)',  'rgba(255,195,30,0.7)']
           : gl.tier === 2
@@ -1603,14 +1935,55 @@
       }
     }
 
+    if (multiClientDefenders && shipPowerState === 'up' && warpState === 'none' && clientDefenderRoster.length) {
+      ctx.save();
+      ctx.font = `${Math.max(8, Math.round(_fSub * 0.82))}px "IBM Plex Mono", monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'alphabetic';
+      for (let di = 0; di < clientDefenderRoster.length; di++) {
+        const def = clientDefenderRoster[di];
+        const dcfg = _SHIP_CONFIGS[def.ship];
+        const dbmp = dcfg.bmp;
+        const dx = Math.round(def.renderX);
+        const dy = Math.round(def.renderY);
+        const dBase = dy + bmpH(dbmp) * PX / 2 - 5;
+        const dft = t * 0.005 + di * 0.45;
+        const dsr = dcfg.flareSplitRow ?? bmpH(dbmp);
+        ctx.save();
+        ctx.globalAlpha = 0.14;
+        ctx.strokeStyle = def.color;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(dx - Math.min(42, def.laneW * 0.18), dy + bmpH(dbmp) * PX / 2 + 22);
+        ctx.lineTo(dx + Math.min(42, def.laneW * 0.18), dy + bmpH(dbmp) * PX / 2 + 22);
+        ctx.stroke();
+        ctx.restore();
+        drawBmp(ctx, dbmp, dx, dy, def.color, def.glow, PX, false, 0, dsr);
+        ctx.save();
+        ctx.globalAlpha = 0.82;
+        for (const f of dcfg.flares) {
+          drawEngineFlare(dx + f.xOff, dBase + f.yOff, dft, f.size * 0.86, (f.len ?? f.size) * 0.86, (f.taper ?? 0.6), (f.shape ?? 'arch'), (f.wobble ?? 1), (f.col ?? null));
+        }
+        ctx.restore();
+        if (dcfg.flareSplitRow != null) drawBmp(ctx, dbmp, dx, dy, def.color, def.glow, PX, false, dsr);
+        _drawDefenderAccent(def, dx, dy, dbmp);
+        const labelChars = Math.max(10, Math.min(24, Math.floor((def.laneW || 150) / 8)));
+        const labelY = dy + bmpH(dbmp) * PX / 2 + 24;
+        ctx.fillStyle = 'rgba(130,185,225,0.76)';
+        _drawLabelLines(_labelLines(def.label, labelChars, 2), dx, labelY, 12);
+      }
+      ctx.restore();
+    }
+
     // Ship config for current selection
     const _SCFG = _SHIP_CONFIGS[currentShip];
     const _shipBmp = _SCFG.bmp;
     const flareBase = cy + bmpH(_shipBmp) * PX / 2 - 5;
     const _shipHW = bmpW(_shipBmp) * PX / 2, _shipHH = bmpH(_shipBmp) * PX / 2;
-    shipBodyHitbox = warpState === 'none' ? { x: cx - _shipHW, y: cy - _shipHH, w: _shipHW * 2, h: _shipHH * 2 } : { x: 0, y: 0, w: 0, h: 0 };
+    shipBodyHitbox = warpState === 'none' && !squadronModeActive ? { x: cx - _shipHW, y: cy - _shipHH, w: _shipHW * 2, h: _shipHH * 2 } : { x: 0, y: 0, w: 0, h: 0 };
     const ft = t * 0.005;
 
+    if (!squadronModeActive) {
     // Descent streak (landing) and launch streak (departing)
     if (carrierState !== 'none' && warpState === 'none') {
       if ((carrierState === 'arriving' || carrierState === 'present') && shipPowerState === 'down') {
@@ -1827,31 +2200,19 @@
     }
 
     // ── HUD Strip ────────────────────────────────────────────
+    }
+
     ctx.save();
     ctx.translate(shakeSx, shakeSy);
     ctx.globalAlpha = 0.62;
 
     // Responsive layout: panel widths scale with viewport, STATS gets the remainder
-    const SH = hudSH;
-    const SY = H - SH - safeBottom;
     const INT_W  = Math.min(240, Math.max(150, Math.round(W * 0.30)));
     const OPT_W  = W < 480 ? 0   : Math.min(140, Math.max(95,  Math.round(W * 0.16)));
     const TDB_W  = Math.min(250, Math.max(140, Math.round(W * 0.28)));
     const TDB_X  = W - TDB_W - OPT_W;
     const INTEL_X = INT_W, OPT_X = W - OPT_W;
     const INTEL_W = Math.max(0, TDB_X - INT_W);
-
-    // Scaled fonts
-    const _fs = W < 480 ? 0.75 : W < 660 ? 0.87 : 1;
-    const _fVal   = Math.max(10, Math.round(16 * _fs));
-    const _fSub   = Math.max(8,  Math.round(10 * _fs));
-    const _fLabel = _fs < 1 ? 8 : 10;
-    const _fShip  = Math.max(8,  Math.round(12 * _fs));
-
-    // Scaled Y anchors (proportional to strip height)
-    const _yLabel = SY + Math.round(SH * 0.185);
-    const _yVal   = SY + Math.round(SH * 0.574);
-    const _ySub   = SY + Math.round(SH * 0.745);
 
     // Background
     ctx.fillStyle = 'rgba(8,11,16,0.80)';
@@ -1998,10 +2359,12 @@
         { key: 'friendlies', label: 'FRIENDLIES', state: showFriendlies, divAfter: true },
         { key: 'client',     label: 'CLIENT',      state: showClient },
         { key: 'domain',     label: 'DOMAIN',     state: showDomain },
+        { key: 'defenders',  label: 'SQUADRON',   state: multiClientDefenders },
+        { key: 'defender-max', label: 'MAX',       kind: 'value', value: String(maxClientDefenders), divAfter: true },
       ];
-      const smw = 186, smItemH = 28, smPad = 10, smDivH = 10, smPhRowH = 34;
-      const smh = smPad + smItemH + smDivH + smItemH * 2 + smDivH + smPhRowH + smPad;
-      const smX = 6, smY = SY - smh - 6;
+      const smw = 218, smItemH = 28, smPad = 10, smDivH = 10, smPhRowH = 34;
+      const smh = smPad + smItemH * _sitems.length + smDivH * 2 + smPhRowH + smPad;
+      const smX = 6, smY = Math.max(6, SY - smh - 6);
       settingsMenuPopupBox = { x: smX, y: smY, w: smw, h: smh };
       ctx.fillStyle = 'rgba(8,11,16,0.92)';
       ctx.fillRect(smX, smY, smw, smh);
@@ -2025,24 +2388,38 @@
         ctx.textAlign = 'left';
         ctx.fillStyle = 'rgba(175,200,238,0.65)';
         ctx.fillText(item.label, smX + 12, siy + 19);
-        // Toggle switch (track + sliding knob); hover state on pill only
-        const pillW = 36, pillH = 14, pillX = smX + smw - 12 - pillW, pillY = siy + (smItemH - pillH) / 2;
-        const pillHov = mouseX >= pillX && mouseX <= pillX + pillW && mouseY >= pillY && mouseY <= pillY + pillH;
-        const knobSz = 10, knobPad = 2;
-        const knobX = item.state ? pillX + pillW - knobSz - knobPad : pillX + knobPad;
-        const knobY = pillY + (pillH - knobSz) / 2;
-        ctx.fillStyle = item.state ? 'rgba(50,215,120,0.22)' : 'rgba(30,32,40,0.55)';
-        ctx.fillRect(pillX, pillY, pillW, pillH);
-        ctx.strokeStyle = item.state
-          ? (pillHov ? 'rgba(80,240,150,0.95)' : 'rgba(50,215,120,0.60)')
-          : (pillHov ? 'rgba(130,135,150,0.85)' : 'rgba(85,88,100,0.50)');
-        ctx.lineWidth = 1; ctx.lineCap = 'butt';
-        ctx.strokeRect(pillX + 0.5, pillY + 0.5, pillW - 1, pillH - 1);
-        ctx.fillStyle = item.state
-          ? (pillHov ? 'rgba(80,240,150,1)'     : 'rgba(50,215,120,0.95)')
-          : (pillHov ? 'rgba(135,140,155,0.90)' : 'rgba(95,100,115,0.75)');
-        ctx.fillRect(knobX, knobY, knobSz, knobSz);
-        settingsMenuItems.push({ key: item.key, hitbox: { x: pillX - 4, y: pillY - 6, w: pillW + 8, h: pillH + 12 } });
+        if (item.kind === 'value') {
+          const boxW = 36, boxH = 18, boxX = smX + smw - 12 - boxW, boxY = siy + (smItemH - boxH) / 2;
+          const boxHov = mouseX >= boxX && mouseX <= boxX + boxW && mouseY >= boxY && mouseY <= boxY + boxH;
+          ctx.fillStyle = boxHov ? 'rgba(140,160,175,0.12)' : 'rgba(30,32,40,0.55)';
+          ctx.fillRect(boxX, boxY, boxW, boxH);
+          ctx.strokeStyle = boxHov ? 'rgba(130,190,230,0.78)' : 'rgba(85,120,150,0.50)';
+          ctx.lineWidth = 1; ctx.lineCap = 'butt';
+          ctx.strokeRect(boxX + 0.5, boxY + 0.5, boxW - 1, boxH - 1);
+          ctx.textAlign = 'center';
+          ctx.fillStyle = boxHov ? 'rgba(215,225,248,0.95)' : 'rgba(175,200,238,0.72)';
+          ctx.fillText(item.value, boxX + boxW / 2, siy + 19);
+          settingsMenuItems.push({ key: item.key, hitbox: { x: boxX - 4, y: boxY - 5, w: boxW + 8, h: boxH + 10 } });
+        } else {
+          // Toggle switch (track + sliding knob); hover state on pill only
+          const pillW = 36, pillH = 14, pillX = smX + smw - 12 - pillW, pillY = siy + (smItemH - pillH) / 2;
+          const pillHov = mouseX >= pillX && mouseX <= pillX + pillW && mouseY >= pillY && mouseY <= pillY + pillH;
+          const knobSz = 10, knobPad = 2;
+          const knobX = item.state ? pillX + pillW - knobSz - knobPad : pillX + knobPad;
+          const knobY = pillY + (pillH - knobSz) / 2;
+          ctx.fillStyle = item.state ? 'rgba(50,215,120,0.22)' : 'rgba(30,32,40,0.55)';
+          ctx.fillRect(pillX, pillY, pillW, pillH);
+          ctx.strokeStyle = item.state
+            ? (pillHov ? 'rgba(80,240,150,0.95)' : 'rgba(50,215,120,0.60)')
+            : (pillHov ? 'rgba(130,135,150,0.85)' : 'rgba(85,88,100,0.50)');
+          ctx.lineWidth = 1; ctx.lineCap = 'butt';
+          ctx.strokeRect(pillX + 0.5, pillY + 0.5, pillW - 1, pillH - 1);
+          ctx.fillStyle = item.state
+            ? (pillHov ? 'rgba(80,240,150,1)'     : 'rgba(50,215,120,0.95)')
+            : (pillHov ? 'rgba(135,140,155,0.90)' : 'rgba(95,100,115,0.75)');
+          ctx.fillRect(knobX, knobY, knobSz, knobSz);
+          settingsMenuItems.push({ key: item.key, hitbox: { x: pillX - 4, y: pillY - 6, w: pillW + 8, h: pillH + 12 } });
+        }
         siy += smItemH;
         if (item.divAfter) {
           ctx.strokeStyle = 'rgba(140,160,175,0.14)'; ctx.lineWidth = 1;
@@ -2063,8 +2440,8 @@
         const phHb = { x: smX, y: siy, w: smw, h: smPhRowH };
         const phHov = mouseX >= phHb.x && mouseX <= phHb.x + phHb.w && mouseY >= phHb.y && mouseY <= phHb.y + phHb.h;
         if (phHov) { ctx.fillStyle = 'rgba(140,160,175,0.08)'; ctx.fillRect(phHb.x, phHb.y, phHb.w, phHb.h); }
-        // Provider icon (Pi-hole or AdGuard)
-        const _iconAspect = PROVIDER === 'adguard' ? 1.0 : (90 / 130);
+        // Provider icon
+        const _iconAspect = PROVIDER === 'adguard' || PROVIDER === 'technitium' ? 1.0 : (90 / 130);
         const iconH = smPhRowH - 8, iconW = Math.round(iconH * _iconAspect);
         const iconX = smX + 12, iconY = siy + (smPhRowH - iconH) / 2;
         if (_phIcon.complete && _phIcon.naturalWidth > 0) {
@@ -2077,7 +2454,7 @@
         ctx.textAlign = 'left';
         ctx.font = `${_fSub}px "Press Start 2P", monospace`;
         ctx.fillStyle = phHov ? 'rgba(215,225,248,0.95)' : 'rgba(175,200,238,0.55)';
-        ctx.fillText(PROVIDER === 'adguard' ? 'ADGUARD' : 'PI-HOLE', iconX + iconW + 12, siy + smPhRowH / 2 + 6);
+        ctx.fillText(PROVIDER_LABEL, iconX + iconW + 12, siy + smPhRowH / 2 + 6);
         // External link arrow drawn with lines
         const _ax = smX + smw - 14, _ay = siy + smPhRowH / 2;
         ctx.strokeStyle = phHov ? 'rgba(215,225,248,0.70)' : 'rgba(140,160,175,0.32)';
@@ -2105,7 +2482,14 @@
       const pct = hudStats.percent;
       const _pctColor = pct == null ? 'rgba(150,150,150,0.50)' : pct >= 60 ? 'rgba(50,215,120,0.85)' : pct >= 40 ? 'rgba(210,220,70,0.85)' : 'rgba(255,110,50,0.85)';
       const _pctVal = pct != null ? pct.toFixed(1)+'%' : '—';
-      const intelCols = INTEL_W >= _i4Min
+      const _errLabel = hudError === 'auth_required' ? 'api token'
+        : hudError === 'invalid-token' ? 'invalid token'
+        : hudError === 'api_unreachable' ? 'api unreachable'
+        : hudError === 'api_url_missing' ? 'api url'
+        : 'api status';
+      const intelCols = hudError
+        ? [{ val: 'AUTH', label: _errLabel, color: 'rgba(255,190,50,0.90)' }]
+        : INTEL_W >= _i4Min
         ? [
             { val: _fmtN(hsTotal),   label: 'total',     color: 'rgba(100,155,220,0.80)' },
             { val: _fmtN(hsBlocked), label: 'blocked',   color: 'rgba(255,70,60,0.90)'   },
@@ -2140,7 +2524,7 @@
     // ── GRAVITY / FILTER ───────────────────────────────────
     ctx.save();
     ctx.beginPath(); ctx.rect(TDB_X, SY, TDB_W, SH); ctx.clip();
-    _modLabel(PROVIDER === 'adguard' ? 'FILTER' : 'GRAVITY', TDB_X + TDB_W / 2, 'center');
+    _modLabel(FILTER_LABEL, TDB_X + TDB_W / 2, 'center');
     let sigsStr, sigsColor = 'rgba(100,160,210,0.65)';
     if (gravityState === 'updating') {
       sigsStr = 'UPDATING';
@@ -2160,11 +2544,11 @@
     ctx.fillText(sigsStr, TDB_X + TDB_W / 2, _yVal);
     ctx.font = `${_fSub}px "Press Start 2P", monospace`;
     ctx.fillStyle = 'rgba(70,130,165,0.45)';
-    ctx.fillText('known threats', TDB_X + TDB_W / 2, _ySub);
+    ctx.fillText(FILTER_SUBLABEL, TDB_X + TDB_W / 2, _ySub);
     // Update arrow - left side of section
     const _aW = bmpW(ARROW_DOWN_BMP) * ARROW_PX;
     const _aX = TDB_X + Math.round(30 * SH / 108), _aY = SY + Math.round(SH * 0.48);
-    let arrowCol = arrowHovered ? 'rgba(255,190,50,0.95)' : 'rgba(100,160,210,0.55)';
+    let arrowCol = READ_ONLY_PROVIDER ? 'rgba(100,160,210,0.20)' : arrowHovered ? 'rgba(255,190,50,0.95)' : 'rgba(100,160,210,0.55)';
     let arrowGlw = arrowHovered ? 'rgba(255,190,50,0.50)' : null;
     if (gravityState === 'updating') {
       const p = (0.65 + 0.35 * Math.sin(t * 0.008)).toFixed(2);
@@ -2324,6 +2708,11 @@
       sseRetryDelay = Math.min(sseRetryDelay * 2, 60000);
     };
   }
+  function _replayRecentEvents() {
+    if (!active) return;
+    sseRetryDelay = 3000;
+    connect();
+  }
 
   function resize() {
     safeBottom = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sab')) || 0;
@@ -2349,6 +2738,7 @@
     if (window._startZenFade) window._startZenFade(true);
     entities.length = 0; lasers.length = 0; explosions.length = 0; queue.length = 0;
     domainFragments.length = 0; debris.length = 0; chainRings.length = 0;
+    clientDefenders.clear();
     drone.state = 'docked'; drone.x = 0; drone.y = 0; drone.lastFire = 0;
     drone.side = 0; drone.angle = 0; drone.targetX = null; drone.targetY = null;
     drone.deployedAt = 0; drone.recallAt = 0;
@@ -2359,6 +2749,7 @@
     drone2Missiles.length = 0;
     hudGravity = null;
     hudStats = { blocked: null, queries: null, percent: null };
+    hudError = '';
     if (hudStatsPollTimer) { clearInterval(hudStatsPollTimer); hudStatsPollTimer = null; }
     gravityState = 'idle'; gravityDoneAt = 0;
     if (gravityPollTimer) { clearTimeout(gravityPollTimer); gravityPollTimer = null; }
@@ -2394,6 +2785,7 @@
     }
     function fetchPiholeStats() {
       fetch('/api/pihole/stats', { signal: AbortSignal.timeout(1800) }).then(r => r.json()).then(d => {
+        hudError = d.error || '';
         if (d.gravity != null) hudGravity = d.gravity;
         if (d.blocking != null) {
           const _wasFirst = _firstEnterFetch;
@@ -2513,6 +2905,7 @@
       carrierState = 'none'; carrierY = 0; carrierRestY = 0;
       entities.length = 0; lasers.length = 0; explosions.length = 0; queue.length = 0;
       domainFragments.length = 0; debris.length = 0; chainRings.length = 0;
+      clientDefenders.clear();
       drone.state = 'docked'; drone.angle = 0; drone.targetX = null; drone.targetY = null;
       drone.deployedAt = 0; drone.recallAt = 0;
       droneMissiles.length = 0;
@@ -2562,7 +2955,11 @@
     const prevGravity = hudGravity;
     const triggeredAt = performance.now();
     gravityState = 'updating';
-    fetch('/api/pihole/gravity-update', { method: 'POST' })
+    fetch('/api/pihole/gravity-update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
       .then(r => r.json())
       .then(d => {
         if (d.error || !d.ok) { gravityState = 'idle'; return; }
@@ -2619,6 +3016,18 @@
           if      (item.key === 'friendlies')  { showFriendlies = !showFriendlies; _saveDisplaySettings(); }
           else if (item.key === 'domain')      { showDomain     = !showDomain;     _saveDisplaySettings(); }
           else if (item.key === 'client')      { showClient     = !showClient;     _saveDisplaySettings(); }
+          else if (item.key === 'defenders')   {
+            multiClientDefenders = !multiClientDefenders;
+            if (multiClientDefenders) {
+              _stowSupportDrones();
+              _assignSquadronDefendersToExisting();
+              if (!clientDefenders.size) _replayRecentEvents();
+            } else {
+              clientDefenders.clear();
+            }
+            _saveDisplaySettings();
+          }
+          else if (item.key === 'defender-max') { _cycleMaxClientDefenders(); }
           else if (item.key === 'pihole-link') {
             const url = phLinkEl ? phLinkEl.dataset.href : null;
             if (url && /^https?:\/\//i.test(url)) window.open(url, '_blank', 'noopener,noreferrer');
@@ -2693,7 +3102,7 @@
     }
 
     // Shield toggle - also closes settings menu
-    if (_inBox(mx, my, shieldHitbox)) {
+    if (!READ_ONLY_PROVIDER && _inBox(mx, my, shieldHitbox)) {
       e.stopPropagation();
       settingsMenuOpen = false;
       _closeSettingsBtnAnimated();
@@ -2703,7 +3112,7 @@
     }
 
     // Gravity arrow
-    if (gravityState === 'idle' && _inBox(mx, my, arrowHitbox)) {
+    if (!READ_ONLY_PROVIDER && gravityState === 'idle' && _inBox(mx, my, arrowHitbox)) {
       e.stopPropagation();
       triggerGravityUpdate();
     }
@@ -2713,8 +3122,8 @@
     if (!active) { arrowHovered = false; shieldHovered = false; shipMenuHovered = false; canvas.style.cursor = ''; return; }
     const rect = canvas.getBoundingClientRect();
     mouseX = e.clientX - rect.left; mouseY = e.clientY - rect.top;
-    arrowHovered = gravityState === 'idle' && _inBox(mouseX, mouseY, arrowHitbox);
-    shieldHovered = _inBox(mouseX, mouseY, shieldHitbox);
+    arrowHovered = !READ_ONLY_PROVIDER && gravityState === 'idle' && _inBox(mouseX, mouseY, arrowHitbox);
+    shieldHovered = !READ_ONLY_PROVIDER && _inBox(mouseX, mouseY, shieldHitbox);
     shipMenuHovered = _inBox(mouseX, mouseY, shipMenuHitbox) && blockingEnabled === true && shipPowerState === 'up' && warpState === 'none';
     const overShieldMenu   = shieldMenuOpen   && shieldMenuItems.some(item => _inBox(mouseX, mouseY, item.hitbox));
     const overShipMenu     = shipMenuOpen     && shipMenuItems.some(item => !item.active && !item.locked && _inBox(mouseX, mouseY, item.hitbox));
@@ -2777,4 +3186,12 @@
     if (gravityPollTimer) { clearTimeout(gravityPollTimer); gravityPollTimer = null; }
     window.enterPiholeMode();
   });
+  } catch (err) {
+    window.__phGameBootError = {
+      name: err && err.name,
+      message: err && err.message,
+      stack: err && err.stack,
+    };
+    console.error('ph-intercept game boot failed', err);
+  }
 })();

@@ -1,6 +1,10 @@
 .claude
 .coverage
 .env
+.venv
+__pycache__
+*.pyc
+bg
 .git
 .gitattributes
 .gitignore

@@ -150,6 +150,11 @@ async def _broadcast(events: list[dict]) -> None:
         try:
             q.put_nowait(payload)
         except asyncio.QueueFull:
+            while True:
+                try:
+                    q.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
             try:
                 q.put_nowait(None)
             except asyncio.QueueFull:
@@ -172,6 +177,10 @@ async def drop_session(_http_client: httpx.AsyncClient) -> None:
 def reset_watermark() -> None:
     global _adguard_last_q_time
     _adguard_last_q_time = 0.0
+
+
+async def get_initial_events(_http_client: httpx.AsyncClient) -> list[dict]:
+    return []
 
 
 async def query_poller(http_client: httpx.AsyncClient) -> None:
